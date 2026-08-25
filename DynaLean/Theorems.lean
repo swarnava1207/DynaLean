@@ -22,7 +22,7 @@ open Topology
 #check ContinuousOn.preimage_isClosed_of_isClosed
 -- #print le_gronwallBound_of_deriv_right_le
 
-variable (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : NNReal) (M : NNReal)
+variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {T : NNReal} {M : NNReal}
 def SolutionExistsandConstantBounded := ∃ x : ℝ → ℝ, x 0 = x0
     ∧ (∀ t ∈ Set.Icc (0 :ℝ) T, HasDerivWithinAt x (f (t :ℝ) (x (t :ℝ))) (Set.Icc 0 T) t)
     ∧ (∀ t ∈ Set.Icc (0:ℝ) T, x t ≤ x0 + M * t)
@@ -37,7 +37,7 @@ Given `x' = f(t,x)` and `f(t,x) ≤ M`, we want to find bounds on `x(t)` at any 
 -/
 theorem constant_bound_solution (hc : ∀ y, Continuous (fun t => f t y)) (K : NNReal)
       (hl : ∀ t, LipschitzWith K (fun x => f t x))
-      (hM : ∀ t x, |f t x| ≤ M) : SolutionExistsandConstantBounded f x0 T M := by
+      (hM : ∀ t x, |f t x| ≤ M) : @SolutionExistsandConstantBounded f x0 T M := by
       let t0 : Set.Icc (0 :ℝ) T := ⟨0, by simp, by simp⟩
       have h1 : IsPicardLindelof f t0 x0 (M*T) 0 M K := by
         apply IsPicardLindelof.mk
@@ -132,7 +132,7 @@ Given `x' = f(t,x)` and `f(t,x) ≤ g(t)`, we want to find bounds on `x(t)` at a
 theorem time_dependent_bound_solution {g : ℝ → ℝ} (hc : ∀ y, Continuous (fun t => f t y)) (K : NNReal)
       (hgc : Continuous g)
       (hl : ∀ t, LipschitzWith K (fun x => f t x))
-      (hg : ∀ t x, |f t x| ≤ g t) : SolutionExistsandTimeDependentBounded f x0 T g := by
+      (hg : ∀ t x, |f t x| ≤ g t) : @SolutionExistsandTimeDependentBounded f x0 T g := by
       let t0 : Set.Icc (0 :ℝ) T := ⟨0, by simp, by simp⟩
       have hgb : ∃ M : ℝ, ∀ t ∈ Set.Icc (0:ℝ) T, |g t| ≤ M := by
         have h_cont : ContinuousOn g (Set.Icc (0:ℝ) T) := by
@@ -399,5 +399,3 @@ theorem comparison_first_order {g : ℝ → ℝ → ℝ} (K : NNReal)
           assumption
         grind
       grind
-
-
