@@ -102,13 +102,13 @@ of length t = 1/(2K) and applies the `Picard-Lindelöf` theorem on each subinter
 a solution piecewise.
 -/
 theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : NNReal)
-      (hKne : K ≠ 0)
+      (hKne : K ≠ 0) (t₀ : ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
       (hfl : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x)) :
-      ∃ x : ℝ → ℝ, SolutionExists f x0 x (0 : ℝ) T (Set.Icc (0 : ℝ) T) := by
+      ∃ x : ℝ → ℝ, SolutionExists f x0 x t₀ T (Set.Icc t₀ T) := by
       let t := 1/(2 * K)
       have htb : 0 < t := by positivity
-      let N := Nat.ceil (T / t)
+      let N := Nat.ceil ((T - t₀)/ t)
       have hloc : ∀ a y : ℝ, ∃ x, SolutionExists f y x a (a + t) (Set.Icc a (a + t)) := by
         intro a y
         have hfb : ∃ M : ℝ, ∀ s ∈ Set.Icc (a : ℝ) (a + t), |f s y| ≤ M := by
@@ -196,14 +196,13 @@ theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : NNReal)
         · grind
         · intro t ht
           grind
-      let ⟨x, hxe⟩ := exists_solution_of_step (by linarith) hloc N 0 x0
+      let ⟨x, hxe⟩ := exists_solution_of_step (by linarith) hloc N t₀ x0
       use x
-      have hTR : (T : ℝ) ≤ (N : ℝ) * (t : ℝ) := by
-        change (T : ℝ) ≤ ((⌈T / t⌉₊ : ℕ) : ℝ) * (t : ℝ)
+      have hTR : (T : ℝ) ≤ t₀ + (N : ℝ) * (t : ℝ) := by
+        change (T : ℝ) ≤ t₀ + ((⌈(T - t₀)/ t⌉₊ : ℕ) : ℝ) * (t : ℝ)
         have htpos : (0 : ℝ) < (t : ℝ) := NNReal.coe_pos.mpr htb
-        have h1 : ((T : ℝ) / (t : ℝ)) ≤ ((⌈T / t⌉₊ : ℕ) : ℝ) := by
-          have h := NNReal.coe_le_coe.mpr (Nat.le_ceil (T / t))
-          push_cast at h
+        have h1 : ((T - t₀: ℝ) / (t : ℝ)) ≤ ((⌈(T - t₀) / t⌉₊ : ℕ) : ℝ) := by
+          have h := (Nat.le_ceil ((T - t₀) / t))
           exact h
         field_simp at h1
         grind
