@@ -8,8 +8,7 @@ namespace ODE
 
 theorem nonneg_integral_bound {ε : NNReal} (hε : 0 < ε) (g : ℝ → ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2)) (hgc : Continuous g)
-      (w : ℝ → ℝ) (hwc : Continuous w) (x : ℝ → ℝ)
-      (u₀ : ℝ)
+      (w : ℝ → ℝ) (hwc : Continuous w) (x : ℝ → ℝ) (u₀ : ℝ)
       (hu₀ : u₀ ∈ Set.Ici (0 : ℝ))
       (hx : SolutionExists f x0 x (0 : ℝ) T (Set.Icc (-(ε : ℝ)) (T+ ε)))
       (hfb : (∀ t ∈ Set.Icc (0 : ℝ) T, f t (x t) ≤ g t * w (x t)))

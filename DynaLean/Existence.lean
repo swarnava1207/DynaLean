@@ -94,6 +94,7 @@ theorem exists_solution_of_step {f : ℝ → ℝ → ℝ} {τ : ℝ} (hτ : 0 �
       rw [heq]
       exact solutionExists_glue hab hbc h₁ h₂
 
+
 /-
 The following theorem proves the existence of a solution to the initial value problem
 `x' = f(t, x), x(0) = x0` on the interval [0, T] under the assumptions that f is continuous
@@ -101,7 +102,7 @@ and Lipschitz in its second argument with constant K. The proof uses induction o
 of length t = 1/(2K) and applies the `Picard-Lindelöf` theorem on each subinterval to construct
 a solution piecewise.
 -/
-theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : NNReal)
+theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
       (hKne : K ≠ 0) (t₀ : ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
       (hfl : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x)) :

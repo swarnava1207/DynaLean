@@ -3,18 +3,17 @@ import DynaLean.Defs
 open Topology
 
 
-variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {T : NNReal} {M : NNReal}
+variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {t₀ T : ℝ} {M : NNReal}
 
 namespace ODE
 /-
 Given `x' = f(t,x)` and `f(t,x) ≤ M`, we want to find bounds on `x(t)` at any time interval in [0,T]
 -/
-theorem constant_bound_solution (x : ℝ → ℝ)
-      (hx : SolutionExists f x0 x (0 : ℝ) T (Set.Icc (0 : ℝ) T))
-      (hM : ∀ t x, |f t x| ≤ M) : ∀ t ∈ Set.Icc (0:ℝ) T, x t ≤ x0 + M * t := by
-      let t0 : Set.Icc (0 :ℝ) T := ⟨0, by simp, by simp⟩
+theorem constant_bound_solution (x : ℝ → ℝ) (ht : t₀ ≤ T)
+      (hx : SolutionExists f x0 x t₀ T (Set.Icc t₀ T))
+      (hM : ∀ t x, |f t x| ≤ M) : ∀ t ∈ Set.Icc t₀ T, x t ≤ x0 + M * (t - t₀) := by
+      let t0 : Set.Icc t₀ T := ⟨t₀, by simp, ht⟩
       intro t ht
-      have : t0 = (0 :ℝ) := by grind
       have ht_le : ↑t0 ≤ t := by grind
       have h_bound : ∀ s ∈ Set.Icc (↑t0) t, f s (x s) ≤ ↑M := by
         intro s _
@@ -23,7 +22,7 @@ theorem constant_bound_solution (x : ℝ → ℝ)
       have h_deriv : ∀ s ∈ Set.Icc (↑t0) t,
                     HasDerivWithinAt x (f s (x s)) (Set.Icc (↑t0) t) s := by
         intro s hs
-        have hs_T : s ∈ Set.Icc 0 ↑T := by
+        have hs_T : s ∈ Set.Icc ↑t0 ↑T := by
           constructor
           · exact le_trans t0.property.1 hs.1
           · exact le_trans hs.2 ht.2
@@ -55,7 +54,6 @@ theorem constant_bound_solution (x : ℝ → ℝ)
           linarith [h_bound s (by grind [interior_subset])]
       have h_eval := h_anti (Set.left_mem_Icc.mpr ht_le) (Set.right_mem_Icc.mpr ht_le) ht_le
       simp only [tsub_le_iff_right] at h_eval
-      rw [this] at h_eval
       rw [hx.1] at h_eval
       grind
 
@@ -65,11 +63,10 @@ set_option linter.style.longLine false in
 Given `x' = f(t,x)` and `f(t,x) ≤ g(t)`, we want to find bounds on `x(t)` at any time interval in [0,T]
 -/
 theorem time_dependent_bound_solution {g : ℝ → ℝ} (x : ℝ → ℝ) (hgc : Continuous g)
-      (hx : SolutionExists f x0 x (0 : ℝ) T (Set.Icc (0 : ℝ) T))
-      (hg : ∀ t x, |f t x| ≤ g t) : ∀ t ∈ Set.Icc (0:ℝ) T, x t ≤ x0 + ∫ s in 0..t, g s:= by
-      let t0 : Set.Icc (0 :ℝ) T := ⟨0, by simp, by simp⟩
+      (hx : SolutionExists f x0 x t₀ T (Set.Icc t₀ T)) (ht : t₀ ≤ T)
+      (hg : ∀ t x, |f t x| ≤ g t) : ∀ t ∈ Set.Icc t₀ T, x t ≤ x0 + ∫ s in t₀..t, g s:= by
+      let t0 : Set.Icc t₀ T := ⟨t₀, by simp, ht⟩
       intro t ht
-      have : t0 = (0 :ℝ) := by grind
       have ht_le : ↑t0 ≤ t := by grind
       have h_bound : ∀ s ∈ Set.Icc (↑t0) t, f s (x s) ≤ g s := by
         intro s _
@@ -78,7 +75,7 @@ theorem time_dependent_bound_solution {g : ℝ → ℝ} (x : ℝ → ℝ) (hgc :
       have h_deriv : ∀ s ∈ Set.Icc (↑t0) t,
                     HasDerivWithinAt x (f s (x s)) (Set.Icc (↑t0) t) s := by
         intro s hs
-        have hs_T : s ∈ Set.Icc 0 ↑T := by
+        have hs_T : s ∈ Set.Icc ↑t0 ↑T := by
           constructor
           · exact le_trans t0.property.1 hs.1
           · exact le_trans hs.2 ht.2
@@ -106,12 +103,13 @@ theorem time_dependent_bound_solution {g : ℝ → ℝ} (x : ℝ → ℝ) (hgc :
           linarith [h_bound s (by grind [interior_subset])]
       have h_eval := h_anti (Set.left_mem_Icc.mpr ht_le) (Set.right_mem_Icc.mpr ht_le) ht_le
       simp only [tsub_le_iff_right] at h_eval
-      rw [this] at h_eval
       rw [hx.1] at h_eval
-      simp only [intervalIntegral.integral_same, sub_zero] at h_eval
-      grind
-
-
+      calc
+        _ ≤ (x0 - ∫ r in 0..↑t0, g r) + ∫ r in 0..t, g r := by grind
+        _ = x0 + (∫ r in 0..t, g r) - ∫ r in 0..↑t0, g r := by ring
+        _ = x0 + ((∫ r in 0..t, g r) - (∫ r in 0..↑t0, g r)) := by ring
+        _ = x0 + ∫ r in ↑t0..t, g r := by
+          rw [intervalIntegral.integral_interval_sub_left] <;> apply hgc.continuousOn.intervalIntegrable
 
 
 end ODE

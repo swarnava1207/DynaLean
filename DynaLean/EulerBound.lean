@@ -35,7 +35,7 @@ variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {T : ℚ}
 theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M > 0)
       (hx : ∀ a b : ℝ, SolutionExists f x0 y a b (Set.Icc a b))
       (hcont : ContDiff ℝ 2 y) (t₀ : ℝ)
-      (ε : ℚ) (hε : ε > 0) (m : ℚ → ℚ → ℚ)
+      (m : ℚ → ℚ → ℚ)
       (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
       (hK : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x))
       (hM : ∀ t, |iteratedDeriv 2 y t| ≤ M)
@@ -44,6 +44,7 @@ theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M 
       ∀ n ∈ Finset.range (Nat.floor (T / S.δ)),
        |y (S.t n) - S.x n| ≤ (S.t n - S.t₀) * (ε + M * S.δ/2) *
             (Real.exp (K * (S.t n - S.t₀))) := by
+      have hε : 0 ≤ ε := le_trans (b := |f 0 0 - m 0 0|) (by grind) (by exact_mod_cast hf 0 0)
       set e := fun n => |y (S.t n) - S.x n| with heq
       intro n hn
       have hmain : ∀ i : ℕ, e (i + 1) ≤ e i * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
@@ -194,7 +195,7 @@ theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M 
                   · intro j hj
                     apply mul_nonneg
                     · exact_mod_cast S.hδ.le
-                    · apply add_nonneg (by exact_mod_cast hε.le)
+                    · apply add_nonneg (by exact_mod_cast hε)
                       apply mul_nonneg _ (by grind)
                       apply mul_nonneg (by exact_mod_cast hMne.le) (by exact_mod_cast S.hδ.le)
         _ = (e 0 + (S.δ*(ε + M * S.δ/2) : ℝ) * n)

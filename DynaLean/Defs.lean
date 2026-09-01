@@ -9,4 +9,3 @@ def SolutionExists (x : ℝ → ℝ) (t₀ t₁ : ℝ) (s : Set ℝ) : Prop :=
 
 
 end ODE
-def IsRational (f : ℝ → ℝ → ℝ) : Prop := ∀ t x : ℚ, ∃ p q : ℤ, q ≠ 0 ∧ f t x = p / q
