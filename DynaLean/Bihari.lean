@@ -6,6 +6,8 @@ variable {f : ℝ → ℝ → ℝ}
 
 namespace ODE
 
+/-- Bihari-type upper bound obtained by transforming the differential inequality
+with the integral of the reciprocal comparison function. -/
 theorem nonneg_integral_bound {ε : NNReal} (hε : 0 < ε) (g : ℝ → ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2)) (hgc : Continuous g)
       (w : ℝ → ℝ) (hwc : Continuous w) (x : ℝ → ℝ) (u₀ : ℝ)

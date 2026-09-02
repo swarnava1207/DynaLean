@@ -5,7 +5,7 @@ open Topology
 
 namespace ODE
 
-
+/-- Taylor's theorem with a first-order term and a second-order remainder. -/
 theorem taylor_upto_two (y : ℝ → ℝ) (hcont : ContDiffOn ℝ 1 y (Set.uIcc t (t + k)))
                         (hk : k ≠ 0)
                         (hy' : DifferentiableOn ℝ (iteratedDerivWithin 1 y (Set.uIcc t (t + k)))
@@ -30,23 +30,25 @@ theorem taylor_upto_two (y : ℝ → ℝ) (hcont : ContDiffOn ℝ 1 y (Set.uIcc 
               simp only [iteratedDerivWithin_one]
               grind
 
-variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {T : ℚ}
+variable {f : ℝ → ℝ → ℝ} {x0 : ℚ} {t₀ T : ℚ}
 
+/-- Bound the global Euler error by accumulating local truncation and model errors. -/
 theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M > 0)
       (hx : ∀ a b : ℝ, SolutionExists f x0 y a b (Set.Icc a b))
-      (hcont : ContDiff ℝ 2 y) (t₀ : ℝ)
+      (hcont : ContDiff ℝ 2 y)
       (m : ℚ → ℚ → ℚ)
       (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
       (hK : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x))
       (hM : ∀ t, |iteratedDeriv 2 y t| ≤ M)
-      (S : Scheme) (hS : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0)
-      (hy': Differentiable ℝ (iteratedDeriv 1 y)) :
-      ∀ n ∈ Finset.range (Nat.floor (T / S.δ)),
+      (S : Scheme) (hS : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0) :
+      ∀ n ,
        |y (S.t n) - S.x n| ≤ (S.t n - S.t₀) * (ε + M * S.δ/2) *
             (Real.exp (K * (S.t n - S.t₀))) := by
+      have hy' : Differentiable ℝ (iteratedDeriv 1 y)
+          := hcont.differentiable_iteratedDeriv 1 (by decide)
       have hε : 0 ≤ ε := le_trans (b := |f 0 0 - m 0 0|) (by grind) (by exact_mod_cast hf 0 0)
       set e := fun n => |y (S.t n) - S.x n| with heq
-      intro n hn
+      intro n
       have hmain : ∀ i : ℕ, e (i + 1) ≤ e i * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
         intro i
         rw [heq]
@@ -214,5 +216,60 @@ theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M 
                         push_cast
                         simp only [add_sub_cancel_left]
             rw [← htn]
+
+
+/-- Construct an Euler scheme whose final grid point is `T`. -/
+def LastSchema (t₀ T : ℚ) (x0 : ℚ) (m : ℚ → ℚ → ℚ) (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T) : Scheme where
+  δ := (T - t₀) / N
+  hδ := by
+    have hN : (0 : ℚ) < N := by simp only [Nat.cast_pos]; grind
+    have hTt : (0 : ℚ) < T - t₀ := by linarith
+    have hdiv : (0 : ℚ) < (T - t₀) / N := by exact_mod_cast div_pos hTt hN
+    exact_mod_cast hdiv
+  t₀ := t₀
+  x₀ := x0
+  m := m
+
+
+/-- Specialize the Euler error bound to a scheme ending exactly at `T`. -/
+theorem euler_bound_solution_last (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M > 0)
+      (hx : ∀ a b : ℝ, SolutionExists f x0 y a b (Set.Icc a b))
+      (hcont : ContDiff ℝ 2 y)
+      (m : ℚ → ℚ → ℚ)
+      (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
+      (hK : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x))
+      (hM : ∀ t, |iteratedDeriv 2 y t| ≤ M)
+      (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T)
+      (S : Scheme) (hS : S = LastSchema t₀ T x0 m N hN ht) :
+      |y T - S.pl T| ≤ (T - t₀) * (ε + M * S.δ/2) *
+            (Real.exp (K * (T - t₀))) := by
+      have hS' : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0 := by
+        simp only [hS]
+        constructor
+        · rfl
+        · constructor <;> rfl
+      have h := euler_bound_solution (t₀ := t₀) y K M hMne hx hcont m hf hK hM S hS'
+      have htn : S.t N = T := by
+            simp only [hS]
+            simp only [Scheme.t_succ']
+            simp only [LastSchema]
+            field_simp
+            ring
+      calc
+        _ = |y (S.t N) - S.pl (S.t N)| := by
+          rw [htn]
+        _ = |y (S.t N) - S.x N| := by
+          simp only [Scheme.pl]
+          rw [S.idx_eq_of_mem_Ico (n := N) (s := S.t N) (by grind) (by simp only [S.t_succ',
+            Nat.cast_add, Nat.cast_one, add_lt_add_iff_left, S.hδ, mul_lt_mul_iff_left₀,
+            lt_add_iff_pos_right, zero_lt_one])]
+          simp [Scheme.lOn]
+        _ ≤ (T - t₀) * (ε + M * S.δ/2) * (Real.exp (K * (T - t₀))) := by
+          specialize h N
+          rw [htn] at h
+          have ht₀ : S.t₀ = t₀ := by simp only [hS]; rfl
+          rw [ht₀] at h
+          rwa [htn]
+
 
 end ODE

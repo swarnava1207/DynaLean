@@ -6,9 +6,7 @@ open Topology
 variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {t₀ T : ℝ} {M : NNReal}
 
 namespace ODE
-/-
-Given `x' = f(t,x)` and `f(t,x) ≤ M`, we want to find bounds on `x(t)` at any time interval in [0,T]
--/
+/-- Bound a solution using a uniform absolute bound on the vector field. -/
 theorem constant_bound_solution (x : ℝ → ℝ) (ht : t₀ ≤ T)
       (hx : SolutionExists f x0 x t₀ T (Set.Icc t₀ T))
       (hM : ∀ t x, |f t x| ≤ M) : ∀ t ∈ Set.Icc t₀ T, x t ≤ x0 + M * (t - t₀) := by
@@ -59,9 +57,7 @@ theorem constant_bound_solution (x : ℝ → ℝ) (ht : t₀ ≤ T)
 
 
 set_option linter.style.longLine false in
-/-
-Given `x' = f(t,x)` and `f(t,x) ≤ g(t)`, we want to find bounds on `x(t)` at any time interval in [0,T]
--/
+/-- Bound a solution using a continuous time-dependent upper bound on the vector field. -/
 theorem time_dependent_bound_solution {g : ℝ → ℝ} (x : ℝ → ℝ) (hgc : Continuous g)
       (hx : SolutionExists f x0 x t₀ T (Set.Icc t₀ T)) (ht : t₀ ≤ T)
       (hg : ∀ t x, |f t x| ≤ g t) : ∀ t ∈ Set.Icc t₀ T, x t ≤ x0 + ∫ s in t₀..t, g s:= by

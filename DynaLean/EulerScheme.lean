@@ -1,5 +1,6 @@
 import Mathlib
 
+/-- The Euler schema initial details packed as a `structure` -/
 structure Scheme where
   δ : ℚ
   hδ : 0 < δ
@@ -21,7 +22,7 @@ def x : ℕ → ℚ
 
 /-- The affine piece carried by the `n`-th subinterval `[tₙ, tₙ₊₁]`,
 evaluated at an arbitrary time `s`. -/
-def plOn (n : ℕ) (s : ℚ) : ℚ :=
+def lOn (n : ℕ) (s : ℚ) : ℚ :=
   S.x n + (s - S.t n) * S.m (S.t n) (S.x n)
 
 /-- Index of the subinterval containing `s`: the unique `n` with
@@ -29,22 +30,25 @@ def plOn (n : ℕ) (s : ℚ) : ℚ :=
 def idx (s : ℚ) : ℕ := ⌊(s - S.t₀) / S.δ⌋.toNat
 
 /-- The piecewise-linear interpolant `x̃`. Computable: every ingredient is rational. -/
-def pl (s : ℚ) : ℚ := S.plOn (S.idx s) s
+def pl (s : ℚ) : ℚ := S.lOn (S.idx s) s
 
 /-- Interpolant clamped to the first `N` steps (constant-slope extension past `t_N`
 is avoided; useful when the theorem is stated on `[t₀, T]` with `T = t_N`). -/
-def plClamp (N : ℕ) (s : ℚ) : ℚ := S.plOn (min N (S.idx s)) s
+def plClamp (N : ℕ) (s : ℚ) : ℚ := S.lOn (min N (S.idx s)) s
 
 /-- Real-valued view of the interpolant, for comparison with the exact solution. -/
 def plR (s : ℚ) : ℝ := (S.pl s : ℝ)
 
 /-! ### Basic rewriting lemmas -/
 
+/-- The first grid time is the initial time. -/
 @[simp] theorem t_zero : S.t 0 = S.t₀ := by simp [t]
 
+/-- Each successive grid time is one step size after the preceding time. -/
 theorem t_succ (n : ℕ) : S.t (n + 1) = S.t n + S.δ := by
   simp [t, add_mul]; ring
 
+/-- The grid-time definition expanded into its closed form. -/
 theorem t_succ' (n : ℕ) : S.t n = S.t₀ + (n : ℚ) * S.δ := by
   induction n with
   | zero => simp [t]
@@ -54,16 +58,19 @@ theorem t_succ' (n : ℕ) : S.t n = S.t₀ + (n : ℚ) * S.δ := by
       push_cast
       ring
 
+/-- The zeroth Euler iterate is the initial value. -/
 @[simp] theorem x_zero : S.x 0 = S.x₀ := rfl
 
+/-- Each Euler iterate is obtained from the preceding iterate by one Euler step. -/
 theorem x_succ (n : ℕ) : S.x (n + 1) = S.x n + S.δ * S.m (S.t n) (S.x n) := rfl
 
-@[simp] theorem plOn_left (n : ℕ) : S.plOn n (S.t n) = S.x n := by
-  simp [plOn]
+/-- The affine piece starts at the Euler iterate for its left endpoint. -/
+@[simp] theorem plOn_left (n : ℕ) : S.lOn n (S.t n) = S.x n := by
+  simp [lOn]
 
 /-- The pieces agree at the shared node: the interpolant is continuous. -/
-theorem plOn_right (n : ℕ) : S.plOn n (S.t (n + 1)) = S.x (n + 1) := by
-  simp [plOn, x_succ, t_succ]
+theorem plOn_right (n : ℕ) : S.lOn n (S.t (n + 1)) = S.x (n + 1) := by
+  simp [lOn, x_succ, t_succ]
 
 /-- On its own subinterval, `idx` picks out the right piece. -/
 theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
@@ -99,8 +106,9 @@ theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S
     rw [this]; simp
 
 
+/-- On a grid subinterval, the interpolant equals its affine piece. -/
 theorem pl_eq_plOn_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
-    S.pl s = S.plOn n s := by
+    S.pl s = S.lOn n s := by
   rw [pl, S.idx_eq_of_mem_Ico h₁ h₂]
 
 /-- The interpolant hits the Euler data at every grid point. -/

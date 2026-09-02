@@ -1,14 +1,12 @@
 import Mathlib
 import DynaLean.Defs
 open Set Filter
-#print IsPicardLindelof
-#check IsCompact.exists_bound_of_continuousOn
-#print NNReal.coe_nonneg
-#check LipschitzWith.lipschitzOnWith
-#check div_le_div_right'
-#search "i + 1 ∈ Finset.range N => i in Finset.range N?"
+open Metric
+
 
 namespace ODE
+
+/-- Restrict a solution to a shorter interval with the same initial time. -/
 theorem SolutionExists.shrink {f : ℝ → ℝ → ℝ} {y : ℝ} {x : ℝ → ℝ} {a b b' : ℝ}
     (h : SolutionExists f y x a b (Set.Icc a b)) (hb' : b' ≤ b) :
     SolutionExists f y x a b' (Set.Icc a b') :=
@@ -95,13 +93,8 @@ theorem exists_solution_of_step {f : ℝ → ℝ → ℝ} {τ : ℝ} (hτ : 0 �
       exact solutionExists_glue hab hbc h₁ h₂
 
 
-/-
-The following theorem proves the existence of a solution to the initial value problem
-`x' = f(t, x), x(0) = x0` on the interval [0, T] under the assumptions that f is continuous
-and Lipschitz in its second argument with constant K. The proof uses induction on subintervals
-of length t = 1/(2K) and applies the `Picard-Lindelöf` theorem on each subinterval to construct
-a solution piecewise.
--/
+/-- Prove existence on `[t₀, T]` by repeatedly applying Picard-Lindelöf on
+subintervals of length `1 / (2K)` and gluing the resulting solutions. -/
 theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
       (hKne : K ≠ 0) (t₀ : ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
@@ -208,5 +201,71 @@ theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
         field_simp at h1
         grind
       exact hxe.shrink (b' := T) (by linarith)
+
+
+variable {f : ℝ → ℝ → ℝ} {t₀ T c r : ℝ} {K : NNReal}
+
+/-- On the box, the extension *is* `f`. -/
+theorem extend_eq_of_mem {t y : ℝ} (ht : t ∈ Set.Icc t₀ T) (hy : y ∈ closedBall c r) :
+    extend f t₀ T c r t y = f t y := by
+  rw [Real.closedBall_eq_Icc] at hy
+  rw [extend, clamp_eq_self ht, clamp_eq_self hy]
+
+/-- The extension is continuous on all of `ℝ × ℝ`. -/
+theorem continuous_extend (ht : t₀ ≤ T) (hr : 0 ≤ r)
+    (hfc : ContinuousOn (fun p : ℝ × ℝ => f p.1 p.2) (Set.Icc t₀ T ×ˢ closedBall c r)) :
+    Continuous (fun p : ℝ × ℝ => extend f t₀ T c r p.1 p.2) := by
+  rw [Real.closedBall_eq_Icc] at hfc
+  have hcr : c - r ≤ c + r := by linarith
+  have hmap : ∀ p : ℝ × ℝ,
+      (clamp t₀ T p.1, clamp (c - r) (c + r) p.2) ∈ Set.Icc t₀ T ×ˢ Set.Icc (c - r) (c + r) :=
+    fun p => ⟨clamp_mem ht p.1, clamp_mem hcr p.2⟩
+  have hg : Continuous fun p : ℝ × ℝ => (clamp t₀ T p.1, clamp (c - r) (c + r) p.2) :=
+    ((lipschitzWith_clamp t₀ T).continuous.comp continuous_fst).prodMk
+      ((lipschitzWith_clamp (c - r) (c + r)).continuous.comp continuous_snd)
+  exact hfc.comp_continuous hg hmap
+
+/-- The extension is globally Lipschitz in the space variable, with the same constant. -/
+theorem lipschitzWith_extend (ht : t₀ ≤ T) (hr : 0 ≤ r)
+    (hfl : ∀ t ∈ Set.Icc t₀ T, LipschitzOnWith K (fun y => f t y) (closedBall c r)) :
+    ∀ t, LipschitzWith K (fun y => extend f t₀ T c r t y) := by
+  intro t
+  have hcr : c - r ≤ c + r := by linarith
+  have hb : ∀ y : ℝ, clamp (c - r) (c + r) y ∈ closedBall c r := by
+    intro y
+    rw [Real.closedBall_eq_Icc]
+    exact clamp_mem hcr y
+  have hL := hfl _ (clamp_mem ht t)
+  refine LipschitzWith.of_dist_le_mul fun y z => ?_
+  have h₁ := hL.dist_le_mul _ (hb y) _ (hb z)
+  have h₂ : dist (clamp (c - r) (c + r) y) (clamp (c - r) (c + r) z) ≤ dist y z := by
+    simpa using (lipschitzWith_clamp (c - r) (c + r)).dist_le_mul y z
+  exact h₁.trans (mul_le_mul_of_nonneg_left h₂ K.coe_nonneg)
+
+/-! ## Existence on all of `[t₀, T]` for the extended field -/
+
+/-- **Main result.**  If `f` is continuous and Lipschitz-in-`x` merely on the compact box
+`Icc t₀ T ×ˢ closedBall c r`, then its constant extension `extend f t₀ T c r` is globally
+continuous and globally Lipschitz, so it has a solution on the *whole* interval `[t₀, T]`
+for any initial value `x₀`.  That solution solves the original equation `x' = f t x`
+at every time at which it happens to sit inside the ball. -/
+theorem exists_solution_of_lipschitzOn_box
+    (f : ℝ → ℝ → ℝ) (x₀ : ℝ) (t₀ T c r : ℝ) {K : NNReal}
+    (hKne : K ≠ 0) (ht : t₀ ≤ T) (hr : 0 ≤ r)
+    (hfc : ContinuousOn (fun p : ℝ × ℝ => f p.1 p.2) (Set.Icc t₀ T ×ˢ closedBall c r))
+    (hfl : ∀ t ∈ Set.Icc t₀ T, LipschitzOnWith K (fun y => f t y) (closedBall c r)) :
+    ∃ x : ℝ → ℝ,
+      SolutionExists (extend f t₀ T c r) x₀ x t₀ T (Set.Icc t₀ T) ∧
+      ∀ t ∈ Set.Icc t₀ T, x t ∈ closedBall c r →
+        HasDerivWithinAt x (f t (x t)) (Set.Icc t₀ T) t := by
+  obtain ⟨x, hx0, hx⟩ :=
+    existence_by_induction (extend f t₀ T c r) x₀ T hKne t₀
+      (continuous_extend ht hr hfc) (lipschitzWith_extend ht hr hfl)
+  refine ⟨x, ⟨hx0, hx⟩, fun t htmem hball => ?_⟩
+  have h := hx t htmem
+  rwa [extend_eq_of_mem htmem hball] at h
+
+
+
 
 end ODE

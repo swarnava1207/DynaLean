@@ -4,6 +4,8 @@ open Topology
 
 namespace ODE
 
+/-- Compare two ODE solutions when the first vector field is pointwise smaller
+and the second is Lipschitz in the state variable. -/
 theorem comparison_first_order {g : ℝ → ℝ → ℝ} (K : NNReal)
       (hl : ∀ t, LipschitzWith K (fun x => g t x)) (x : ℝ → ℝ) (y : ℝ → ℝ)
       (ht : t₀ ≤ T)
