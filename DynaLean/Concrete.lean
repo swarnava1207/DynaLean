@@ -73,9 +73,7 @@ def mkBoundCmd [Monad m] [MonadQuotation m]
     (name : Ident) (S : Term) (n : ℕ) (shape : BoundShape) (prf : TSyntax `tactic) :
     m (TSyntax `command) := do
   let stmt ← mkStmt S n shape
-  let declId : TSyntax ``Parser.Command.declId :=
-    ⟨mkNode ``Parser.Command.declId #[name.raw, mkNullNode]⟩
-  `(command| theorem $declId : $stmt := by $prf:tactic)
+  `(command| theorem $name : $stmt := by $prf:tactic)
 
 /-- Tier 2: round `v` outward to `digits` decimal places.
 Collapses to `.eq` when `v` is exactly representable at that precision. -/
