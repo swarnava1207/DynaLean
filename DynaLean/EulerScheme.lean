@@ -13,9 +13,11 @@ namespace Scheme
 variable (S : Scheme)
 
 /-- The time grid `tₙ = t₀ + n·δ`. -/
+@[simp]
 def t (n : ℕ) : ℚ := S.t₀ + (n : ℚ) * S.δ
 
 /-- The Euler iterates `x₀`, `x_{n+1} = xₙ + δ · m(xₙ, tₙ)`. -/
+@[simp]
 def x : ℕ → ℚ
   | 0     => S.x₀
   | n + 1 => x n + S.δ * S.m (S.t n) (x n)
@@ -62,15 +64,15 @@ theorem t_succ' (n : ℕ) : S.t n = S.t₀ + (n : ℚ) * S.δ := by
 @[simp] theorem x_zero : S.x 0 = S.x₀ := rfl
 
 /-- Each Euler iterate is obtained from the preceding iterate by one Euler step. -/
-theorem x_succ (n : ℕ) : S.x (n + 1) = S.x n + S.δ * S.m (S.t n) (S.x n) := rfl
+@[simp] theorem x_succ (n : ℕ) : S.x (n + 1) = S.x n + S.δ * S.m (S.t n) (S.x n) := rfl
 
 /-- The affine piece starts at the Euler iterate for its left endpoint. -/
 @[simp] theorem plOn_left (n : ℕ) : S.lOn n (S.t n) = S.x n := by
-  simp [lOn]
+  simp only [lOn, t, sub_self, zero_mul, add_zero]
 
 /-- The pieces agree at the shared node: the interpolant is continuous. -/
 theorem plOn_right (n : ℕ) : S.lOn n (S.t (n + 1)) = S.x (n + 1) := by
-  simp [lOn, x_succ, t_succ]
+  simp only [lOn, t_succ, add_sub_cancel_left, x_succ]
 
 /-- On its own subinterval, `idx` picks out the right piece. -/
 theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
@@ -103,7 +105,7 @@ theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S
         _ = 1 := by simp only [t_succ, add_sub_cancel_left, div_self_eq_one₀, ne_eq]; exact S.hδ.ne'
     have : Int.floor ((s - S.t n)/S.δ) = 0 := by
       apply Int.floor_eq_zero_iff.2 ⟨ge_0, lt_1⟩
-    rw [this]; simp
+    rw [this]; simp only [zero_add, Int.toNat_natCast]
 
 
 /-- On a grid subinterval, the interpolant equals its affine piece. -/
