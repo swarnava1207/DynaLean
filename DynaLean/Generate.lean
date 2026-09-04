@@ -2,6 +2,7 @@ import DynaLean.EulerScheme
 import Lean
 open Lean Elab Command Term Meta PrettyPrinter
 open Lean.Meta.Tactic.TryThis
+open Lean.Meta.Tactic.Cbv Lean.Meta.Sym.Simp
 
 elab "check_validity " S:term:max t:term:max thm:ident : term => do
     let et ← elabTerm t (mkConst ``Nat)
@@ -12,13 +13,8 @@ elab "check_validity " S:term:max t:term:max thm:ident : term => do
       let theoremSyntax ← mkAppM thm.getId #[eS, et]
       let rawType ← inferType theoremSyntax
       let rawType ← instantiateMVars rawType
-      let simpTheorems ← getSimpTheorems
-      let congrTheorems ← getSimpCongrTheorems
-      let ctx := Simp.mkContext {} #[simpTheorems] congrTheorems
-      let simprocs ← Lean.Meta.Simp.getSimprocs
-      let (simpResult, _) ← simp rawType (← ctx) (simprocs := #[simprocs])
-      let evalType := simpResult.expr
-      pure evalType
+      let result ← cbvEntry rawType
+      return Result.getResultExpr rawType result
     else
       throwError "Expected a Scheme and a Nat, but got {eSType} and {type}"
 
