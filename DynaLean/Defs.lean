@@ -6,7 +6,7 @@ namespace ODE
 variable (f : ℝ → ℝ → ℝ) (x₀ : ℝ)
 
 /-- A predicate expressing that `x` solves the ODE driven by `f` on an interval. -/
-def SolutionExists (x : ℝ → ℝ) (t₀ t₁ : ℝ) (s : Set ℝ) : Prop :=
+def SolutionExists (x : ℝ → ℝ) (t₀ t₁ : ℝ) (s : Set ℝ := Set.Icc t₀ t₁) : Prop :=
   x t₀ = x₀ ∧ ∀ t ∈ Set.Icc t₀ t₁, HasDerivWithinAt x (f t (x t)) s t
 
 /-! ## Clamping a real number into an interval -/

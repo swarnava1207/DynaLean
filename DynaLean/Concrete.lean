@@ -83,45 +83,7 @@ def roundTo (v : ℚ) (digits : ℕ) : BoundShape :=
   let hi : ℚ := ((-(Rat.floor (-(v * D))) : ℤ) : ℚ) / D
   if lo == hi then .eq v else .between lo hi
 
-/-! ## 3. Compute phase
-
-Untrusted: it only chooses which numbers appear in the statement. A wrong answer here
-cannot produce an unsound theorem, it just makes the generated proof fail loudly in
-step 4. -/
-
-private def cbvNF (e : Expr) : MetaM Expr := do
-  return Result.getResultExpr e (← cbvEntry e)
-
-/-- `getIntValue?` does not see through the raw `Int` constructors, which is what `cbv`
-leaves behind for `Rat.num` (e.g. `Int.ofNat 1048576`). -/
-private def intOf? (e : Expr) : MetaM (Option Int) := do
-  if let some i ← getIntValue? e then return some i
-  match e.getAppFnArgs with
-  | (``Int.ofNat,   #[a]) => return (← getNatValue? a).map Int.ofNat
-  | (``Int.negSucc, #[a]) => return (← getNatValue? a).map Int.negSucc
-  | _                     => return none
-
-/-- As `intOf?`, tolerating a raw `Nat` literal. -/
-private def natOf? (e : Expr) : MetaM (Option Nat) := do
-  if let some n ← getNatValue? e then return some n
-  return getRawNatValue? e
-
-/-- Reduce a closed `ℚ`-valued expression to an exact rational using `cbv`.
-Falls back to reducing numerator and denominator separately, which is more robust
-than hoping the normal form is a recognisable `ℚ` literal. -/
-def evalRatCbv (e : Expr) : MetaM ℚ := do
-  let v ← cbvNF e
-  if let some q ← getRatValue? v then return q
-  let numE ← cbvNF (← mkAppM ``Rat.num #[v])
-  let denE ← cbvNF (← mkAppM ``Rat.den #[v])
-  let some num ← intOf? numE
-    | throwError "cbv did not reduce the numerator to a literal:{indentExpr numE}"
-  let some den ← natOf? denE
-    | throwError "cbv did not reduce the denominator to a literal:{indentExpr denE}"
-  return mkRat num den
-
-
-/-! ## 4. The command -/
+/-! ## 3. The command -/
 
 syntax (name := deriveBoundCmd)
   "#derive_bound " ident ppSpace term:max ppSpace num (" digits " num)? : command
@@ -158,7 +120,7 @@ def elabDeriveBound : CommandElab := fun stx => do
       let eS ← Term.elabTerm S (some (mkConst ``Scheme))
       Term.synthesizeSyntheticMVarsNoPostponing
       let eS ← instantiateMVars eS
-      evalRatCbv (← mkAppM ``Scheme.x #[eS, mkNatLit nVal])
+      unsafe evalExpr' Rat ``Rat (← mkAppM ``Scheme.x #[eS, mkNatLit nVal])
     let shape := match k with
       | none    => BoundShape.eq v
       | some kk => roundTo v kk.getNat
@@ -186,7 +148,7 @@ def egScheme : Scheme where
   hδ := by norm_num
   t₀ := 0
   x₀ := 1
-  m := fun t x => x + t ^ 2 + x/t
+  m := fun t x => x
 
 /-- `δ = 1/3`, `m t x = x` ⇒ `x n = (4/3) ^ n`. Denominator `3 ^ n`: singly
 exponential, so exact evaluation copes for a long time. -/
