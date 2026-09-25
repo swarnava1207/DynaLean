@@ -5,7 +5,7 @@ namespace ODE
 variable {f : ℝ → ℝ → ℝ} {t₀ x₀ : ℝ}
 
 theorem solution_regularOn (hf : ContDiff ℝ 1 (fun t : ℝ × ℝ => f t.1 t.2))
-    (y : ℝ → ℝ) (hy : SolutionExists f (y a) y a b (Set.Icc a b))
+    (y : ℝ → ℝ) (hy : SolutionExists f x₀ y a b (Set.Icc a b))
     : a < b → (ContDiffOn ℝ 2 y <| Set.Icc a b) := by
   intro hab
   change ContDiffOn ℝ (1 + 1) y (Set.Icc a b)
