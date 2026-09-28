@@ -204,7 +204,7 @@ theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
       exact hxe.shrink (b' := T) (by linarith)
 
 theorem uniqueness_of_solution_of_lipschitzOn_box {K x y} {f : ℝ → ℝ → ℝ} {x₀ : ℝ} {t₀ T : ℝ}
-    (hT : t₀ ≤ T) (hfl : ∀ t, LipschitzWith K (fun y => f t y))
+    (hT : t₀ ≤ T) (hfl : ∀ t ∈ Set.Icc t₀ T, LipschitzWith K (fun y => f t y))
     (hx1 : SolutionExists f x₀ x t₀ T (Set.Icc t₀ T))
     (hx2 : SolutionExists f x₀ y t₀ T (Set.Icc t₀ T)) : EqOn x y (Set.Icc t₀ T) := by
     have h1 : ∀ t ∈ Set.Icc t₀ T, x t ≤ y t := by

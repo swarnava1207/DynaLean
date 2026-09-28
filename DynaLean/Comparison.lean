@@ -7,7 +7,7 @@ namespace ODE
 /-- Compare two ODE solutions when the first vector field is pointwise smaller
 and the second is Lipschitz in the state variable. -/
 theorem comparison_first_order {g : ℝ → ℝ → ℝ} (K : NNReal)
-      (hl : ∀ t, LipschitzWith K (fun x => g t x)) (x : ℝ → ℝ) (y : ℝ → ℝ)
+      (hl : ∀ t ∈ Set.Icc t₀ T, LipschitzWith K (fun x => g t x)) (x : ℝ → ℝ) (y : ℝ → ℝ)
       (ht : t₀ ≤ T)
       (hb : ∀ t ∈ Set.Icc t₀ T, f t (x t) ≤ g t (x t))
       (hxe : SolutionExists f x0 x t₀ T (Set.Icc t₀ T))
@@ -22,7 +22,7 @@ theorem comparison_first_order {g : ℝ → ℝ → ℝ} (K : NNReal)
         exact h1
       have hbl : ∀ s ∈ Set.Icc t₀ T, g s (x s) - g s (y s) ≤ K * |z s| := by
         intro s hs
-        have h2 := hl s (x s) (y s)
+        have h2 := hl s hs (x s) (y s)
         simp only at h2
         simp only [edist_dist, dist_eq_norm, Real.norm_eq_abs] at h2
         have h3 : |x s - y s| = |z s| := by grind
