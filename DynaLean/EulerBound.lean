@@ -33,13 +33,13 @@ variable {f : ℝ → ℝ → ℝ} {x0 : ℚ} {t₀ T : ℚ}
 /-- Bound the global Euler error by accumulating local truncation and model errors. -/
 theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M > 0)
       (hT : t₀ < T)
-      (hx : SolutionExists f (x0 : ℝ) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
-              (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
-      (hcont : ContDiffOn ℝ 2 y (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (hx : SolutionExists f (x0 : ℝ) y (t₀ : ℝ) (T : ℝ)
+              (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc (t₀ : ℝ) (T : ℝ)))
       (m : ℚ → ℚ → ℚ)
       (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
-      (hK : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x))
-      (hM : ∀ t ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : NNReal) (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo (t₀ : ℝ) (T: ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
       (S : Scheme) (hS : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0) :
       ∀ n ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊ + 1),
        |y (S.t n) - S.x n| ≤ (S.t n - S.t₀) * (ε + M * S.δ/2) *
@@ -173,7 +173,7 @@ theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M 
                   apply add_le_add_right
                   apply mul_le_mul_of_nonneg_left _ (by exact_mod_cast S.hδ.le)
                   apply add_le_add
-                  · specialize hK (S.t i)
+                  · specialize hK (S.t i) (by grind)
                     set g := fun x => f (S.t i) x with hg
                     have hg' : ∀ x , g x = f (S.t i) x := by grind
                     rw [← hg', ← hg']
@@ -276,7 +276,7 @@ theorem euler_bound_solution_last (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne
       (hcont : ContDiffOn ℝ 2 y (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
       (m : ℚ → ℚ → ℚ)
       (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
-      (hK : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x))
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : NNReal) (fun x => f t x))
       (hM : ∀ t ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
       (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T)
       (S : Scheme) (hS : S = LastSchema t₀ T x0 m N hN ht) :

@@ -99,7 +99,7 @@ subintervals of length `1 / (2K)` and gluing the resulting solutions. -/
 theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
       (hKne : K ≠ 0) (t₀ : ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
-      (hfl : ∀ t, LipschitzWith (K : NNReal) (fun x => f t x)) :
+      (hfl : ∀ t , LipschitzWith (K : NNReal) (fun x => f t x)) :
       ∃ x : ℝ → ℝ, SolutionExists f x0 x t₀ T (Set.Icc t₀ T) := by
       let t := 1/(2 * K)
       have htb : 0 < t := by positivity
@@ -203,6 +203,289 @@ theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
         grind
       exact hxe.shrink (b' := T) (by linarith)
 
+/-- Existence of a solution on `[t₀, T]` if `f` is Lipschitz in the second argument on `[t₀, T]`. -/
+theorem existence_by_induction_lipschitzOn {K : NNReal} (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
+      (hKne : K ≠ 0) (t₀ : ℝ) (ht : t₀ < T)
+      (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
+      (hfl : ∀ t ∈ Set.Icc t₀ (t₀ + Nat.ceil ((T - t₀) * 2 * K)/ (2 * K)),
+      LipschitzWith K (fun x => f t x)) :
+      ∃ x : ℝ → ℝ, SolutionExists f x0 x t₀ T (Set.Icc t₀ T) := by
+      let t := 1/(2 * K)
+      have htb : 0 < t := by positivity
+      let N := Nat.ceil ((T - t₀)/ t)
+      have hloc : ∀ n ∈ Finset.range N, ∃ x ,
+              SolutionExists f x0 x t₀ (t₀ + (n + 1) * t) (Set.Icc t₀ (t₀ + (n + 1) * t)) := by
+        intro n hn
+        induction n with
+        | zero =>
+          simp only [CharP.cast_eq_zero]
+          simp only [zero_add, one_mul]
+          have hb : ∃ M , ∀ z ∈ Set.Icc t₀ (t₀ + t), |f z x0| ≤ M := by
+            let func := fun p : ℝ × ℝ => f p.1 p.2
+            let g := fun p : ℝ => func (p, x0)
+            have hg : Continuous g := by
+              apply Continuous.along_fst
+              exact hfc
+            have : ∃ M : ℝ, ∀ z ∈ Set.Icc t₀ (t₀ + t), ‖g z‖ ≤ M := by
+              apply IsCompact.exists_bound_of_continuousOn
+              · exact isCompact_Icc
+              · exact hg.continuousOn
+            let ⟨M, hM⟩ := this
+            use M
+            intro s hs
+            specialize hM s hs
+            simp only [Real.norm_eq_abs] at hM
+            exact hM
+          let ⟨M, hM⟩ := hb
+          let M : NNReal :=
+          ⟨M, by specialize hM t₀ (by exact ⟨by grind, by simp only [le_add_iff_nonneg_right,
+            NNReal.zero_le_coe]⟩); grind⟩
+          set t₀ : Set.Icc t₀ (t₀ + t) := ⟨t₀, by simp, by simp⟩ with ht₀def
+          have ipl : IsPicardLindelof f t₀ x0 (2*M/K) 0 (3*M) K := by
+            constructor
+            · intro s hs
+              have hs' : s ∈ Set.Icc (t₀ : ℝ) (t₀ + Nat.ceil ((T - t₀) * 2 * K)/ (2 * K)) := by
+                simp only [mem_Icc]
+                apply And.intro hs.1
+                simp only [t] at hs
+                apply le_trans hs.2
+                simp only [t₀]
+                simp only [one_div, mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_ofNat,
+                  add_le_add_iff_left]
+                field_simp
+                simp only [Nat.one_le_cast, Nat.one_le_ceil_iff]
+                positivity
+              specialize hfl s hs'
+              apply LipschitzWith.lipschitzOnWith
+              exact hfl
+            · intro x hx
+              let func := fun p : ℝ × ℝ => f p.1 p.2
+              let g := fun p : ℝ => func (p, x)
+              have hg : Continuous g := by
+                apply Continuous.along_fst
+                exact hfc
+              have : (fun s => f s x) = g := by rfl
+              rw [this]
+              exact hg.continuousOn
+            · intro s hs x hx
+              have hlip : ‖f s x - f s x0‖ ≤ (K : ℝ) * ‖x - x0‖ := by
+                have hs' : s ∈ Set.Icc (t₀ : ℝ) (t₀ + Nat.ceil ((T - t₀) * 2 * K)/ (2 * K)) := by
+                  simp only [mem_Icc]
+                  apply And.intro hs.1
+                  simp only [t] at hs
+                  apply le_trans hs.2
+                  simp only [t₀]
+                  simp only [one_div, mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_ofNat,
+                    add_le_add_iff_left]
+                  field_simp
+                  simp only [Nat.one_le_cast, Nat.one_le_ceil_iff]
+                  positivity
+                specialize hfl s hs'
+                specialize hfl x x0
+                rw [edist_dist, edist_dist, dist_eq_norm, dist_eq_norm] at hfl
+                rw [← ENNReal.ofReal_coe_nnreal] at hfl
+                rw [← ENNReal.ofReal_mul] at hfl
+                · simp only at hfl
+                  · rw [ENNReal.ofReal_le_ofReal_iff] at hfl
+                    · exact hfl
+                    · apply mul_nonneg
+                      · simp only [NNReal.zero_le_coe]
+                      · exact norm_nonneg _
+                · exact NNReal.coe_nonneg K
+              have hM' : ‖f s x - f s x0‖ ≤ 2 * M := by
+                apply le_trans hlip
+                calc
+                  (K : ℝ) * ‖x - x0‖ ≤ (K : ℝ) * (2*M/K) := by
+                    apply mul_le_mul_of_nonneg_left
+                    · exact hx
+                    · exact NNReal.coe_nonneg K
+                  _ = 2 * M := by field_simp
+              calc
+                ‖f s x‖ ≤ |‖f s x‖ - ‖f s x0‖| + ‖f s x0‖ := by grind only [=
+                    abs.eq_1,
+                  = max_def]
+                |‖f s x‖ - ‖f s x0‖| + ‖f s x0‖ ≤ ‖f s x - f s x0‖ + ‖f s x0‖
+                            := by grind only [abs_norm_sub_norm_le]
+                _ ≤ 2 * M + ‖f s x0‖ := by linarith only [hM']
+                _ ≤ 3 * M := by specialize hM s hs
+                                simp only [Real.norm_eq_abs]
+                                have : |f s x0| ≤ M := hM
+                                linarith
+            · simp only [NNReal.coe_mul, NNReal.coe_ofNat, sub_zero, NNReal.coe_div,
+              NNReal.coe_zero]
+              rw [ht₀def]
+              simp only [add_sub_cancel_left, sub_self, NNReal.zero_le_coe, sup_of_le_left]
+              calc
+                _ = (3* M * 1/(2*K) : ℝ) := by simp only [t]; push_cast; ring
+                _ = (3 * M / (2*K) : ℝ) := by ring
+                _ = (3 / 2 : ℝ) * (↑M / ↑K) := by ring
+                _ ≤ 2 * (↑M / ↑K) := mul_le_mul_of_nonneg_right (by norm_num) (by positivity)
+                _ = 2 * ↑M / ↑K := by ring
+          let ⟨x, hxe⟩ := IsPicardLindelof.exists_eq_forall_mem_Icc_hasDerivWithinAt₀ ipl
+          use x
+          apply And.intro (by exact hxe.1)
+          exact hxe.2
+        | succ n ih =>
+          have hn' : n ∈ Finset.range N := by grind
+          have h₁ := ih hn'
+          let ⟨x₁, h₁⟩ := h₁
+          have hM : ∃ M , ∀ z ∈ Set.Icc (t₀ + (n + 1) * t) (t₀ + (n + 2) * t),
+              |f z (x₁ (t₀ + (n + 1) * t))| ≤ M := by
+            let func := fun p : ℝ × ℝ => f p.1 p.2
+            let g := fun p : ℝ => func (p, x₁ (t₀ + (n + 1) * t))
+            have hg : Continuous g := by
+              apply Continuous.along_fst
+              exact hfc
+            have : ∃ M : ℝ, ∀ z ∈ Set.Icc (t₀ + (n + 1) * t) (t₀ + (n + 2) * t), ‖g z‖ ≤ M := by
+              apply IsCompact.exists_bound_of_continuousOn
+              · exact isCompact_Icc
+              · exact hg.continuousOn
+            let ⟨M, hM⟩ := this
+            use M
+            intro s hs
+            specialize hM s hs
+            simp only [Real.norm_eq_abs] at hM
+            exact hM
+          let ⟨M, hM⟩ := hM
+          let M : NNReal :=
+          ⟨M, by specialize hM (t₀ + (n + 1) * t) (by exact ⟨by grind,
+            by simp only [add_le_add_iff_left];
+               apply mul_le_mul_of_nonneg_right (by simp only [add_le_add_iff_left,
+              Nat.one_le_ofNat]) (by norm_cast; exact htb.le)⟩); grind⟩
+          set tn : Set.Icc (t₀ + (n + 1) * t) (t₀ + (n + 2) * t)
+            := ⟨t₀ + (n + 1) * t, by simp,
+                by simp only [add_le_add_iff_left]
+                   apply mul_le_mul_of_nonneg_right
+                    (by norm_cast; grind) (by norm_cast;exact htb.le)⟩
+                   with ht₀def
+          have ipl : IsPicardLindelof f tn (x₁ (t₀ + (n + 1) * t)) (2*M/K) 0 (3*M) K := by
+            constructor
+            · intro s hs
+              have hs' : s ∈ Set.Icc (t₀ : ℝ) (t₀ + Nat.ceil ((T - t₀) * 2 * K)/ (2 * K)) := by
+                simp only [mem_Icc]
+                apply And.intro (le_trans (by simp only [le_add_iff_nonneg_right]; positivity) hs.1)
+                simp only [t] at hs
+                apply le_trans hs.2
+                simp only [one_div, mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_ofNat,
+                  add_le_add_iff_left]
+                field_simp
+                have hp : n + 1 < Nat.ceil ((T - t₀) * 2 * K) := by
+                  simp only [N, t] at hn
+                  simp only [one_div, mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_ofNat,
+                    Finset.mem_range] at hn
+                  grind
+                norm_cast
+                push_cast
+                grind
+              specialize hfl s hs'
+              apply LipschitzWith.lipschitzOnWith
+              exact hfl
+            · intro x hx
+              let func := fun p : ℝ × ℝ => f p.1 p.2
+              let g := fun p : ℝ => func (p, x)
+              have hg : Continuous g := by
+                apply Continuous.along_fst
+                exact hfc
+              have : (fun s => f s x) = g := by rfl
+              rw [this]
+              exact hg.continuousOn
+            · intro s hs x hx
+              have hlip : ‖f s x - f s (x₁ (t₀ + (n + 1) * t))‖
+              ≤ (K : ℝ) * ‖x - (x₁ (t₀ + (n + 1) * t))‖ := by
+                have hs' : s ∈ Set.Icc (t₀ : ℝ) (t₀ + Nat.ceil ((T - t₀) * 2 * K)/ (2 * K)) := by
+                  simp only [mem_Icc]
+                  apply And.intro
+                   (le_trans (by simp only [le_add_iff_nonneg_right]; positivity) hs.1)
+                  simp only [t] at hs
+                  apply le_trans hs.2
+                  simp only [one_div, mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_ofNat,
+                    add_le_add_iff_left]
+                  field_simp
+                  have hp : n + 1 < Nat.ceil ((T - t₀) * 2 * K) := by
+                    simp only [N, t] at hn
+                    simp only [one_div, mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv,
+                      NNReal.coe_ofNat,
+                      Finset.mem_range] at hn
+                    grind
+                  norm_cast
+                  push_cast
+                  grind
+                specialize hfl s hs'
+                specialize hfl x (x₁ (t₀ + (n + 1) * t))
+                rw [edist_dist, edist_dist, dist_eq_norm, dist_eq_norm] at hfl
+                rw [← ENNReal.ofReal_coe_nnreal] at hfl
+                rw [← ENNReal.ofReal_mul] at hfl
+                · simp only at hfl
+                  · rw [ENNReal.ofReal_le_ofReal_iff] at hfl
+                    · exact hfl
+                    · apply mul_nonneg
+                      · simp only [NNReal.zero_le_coe]
+                      · exact norm_nonneg _
+                · exact NNReal.coe_nonneg K
+              have hM' : ‖f s x - f s (x₁ (t₀ + (n + 1) * t))‖ ≤ 2 * M := by
+                apply le_trans hlip
+                calc
+                  (K : ℝ) * ‖x - (x₁ (t₀ + (n + 1) * t))‖ ≤ (K : ℝ) * (2*M/K) := by
+                    apply mul_le_mul_of_nonneg_left
+                    · exact hx
+                    · exact NNReal.coe_nonneg K
+                  _ = 2 * M := by field_simp
+              calc
+                ‖f s x‖ ≤ |‖f s x‖ - ‖f s (x₁ (t₀ + (n + 1) * t))‖| + ‖f s (x₁ (t₀ + (n + 1) * t))‖
+                := by grind only [=
+                    abs.eq_1,
+                  = max_def]
+                |‖f s x‖ - ‖f s (x₁ (t₀ + (n + 1) * t))‖| + ‖f s (x₁ (t₀ + (n + 1) * t))‖
+                  ≤ ‖f s x - f s (x₁ (t₀ + (n + 1) * t))‖ + ‖f s (x₁ (t₀ + (n + 1) * t))‖
+                            := by grind only [abs_norm_sub_norm_le]
+                _ ≤ 2 * M + ‖f s (x₁ (t₀ + (n + 1) * t))‖ := by linarith only [hM']
+                _ ≤ 3 * M := by specialize hM s hs
+                                simp only [Real.norm_eq_abs]
+                                have : |f s (x₁ (t₀ + (n + 1) * t))| ≤ M := by exact hM
+                                linarith
+            · simp only [NNReal.coe_mul, NNReal.coe_ofNat, sub_zero, NNReal.coe_div,
+              NNReal.coe_zero]
+              rw [ht₀def]
+              simp only [sub_self]
+              calc
+                _ = (3* M * 1/(2*K) : ℝ) := by
+                  simp only [add_sub_add_left_eq_sub, mul_one]; ring_nf; simp only [t];
+                  simp only [one_div,
+                              mul_inv_rev, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_ofNat,
+                              inv_pos,
+                              Nat.ofNat_pos, mul_nonneg_iff_of_pos_right, inv_nonneg,
+                              NNReal.zero_le_coe,
+                              sup_of_le_left]; grind
+                _ = (3 * M / (2*K) : ℝ) := by ring
+                _ = (3 / 2 : ℝ) * (↑M / ↑K) := by ring
+                _ ≤ 2 * (↑M / ↑K) := mul_le_mul_of_nonneg_right (by norm_num) (by positivity)
+                _ = 2 * ↑M / ↑K := by ring
+          let ⟨x, hxe⟩ := IsPicardLindelof.exists_eq_forall_mem_Icc_hasDerivWithinAt₀ ipl
+          let ⟨x₂, h₂⟩ := solutionExists_glue
+                   (by simp only [le_add_iff_nonneg_right]; positivity) (by linarith) h₁ hxe
+          use x₂
+          grind
+      let ⟨x, hxe⟩ := hloc (N - 1) (by simp only [Finset.mem_range, tsub_lt_self_iff,
+           Order.lt_one_iff, and_true]; positivity)
+      use x
+      apply hxe.shrink (b' := T)
+      norm_cast
+      have hTR : (T : ℝ) ≤ t₀ + (N : ℝ) * (t : ℝ) := by
+        change (T : ℝ) ≤ t₀ + ((⌈(T - t₀)/ t⌉₊ : ℕ) : ℝ) * (t : ℝ)
+        have htpos : (0 : ℝ) < (t : ℝ) := NNReal.coe_pos.mpr htb
+        have h1 : ((T - t₀: ℝ) / (t : ℝ)) ≤ ((⌈(T - t₀) / t⌉₊ : ℕ) : ℝ) := by
+          have h := (Nat.le_ceil ((T - t₀) / t))
+          exact h
+        field_simp at h1
+        grind
+      apply le_trans hTR
+      simp only [Nat.cast_add, Nat.cast_one, add_le_add_iff_left]
+      apply mul_le_mul_of_nonneg_right _ (by positivity)
+      norm_cast
+      grind
+
+set_option linter.style.longLine false in
+/-- Uniqueness of Picard-Lindelof solution given `f` is Lipschitz in the 2nd argument on `[t₀, T]` -/
 theorem uniqueness_of_solution_of_lipschitzOn_box {K x y} {f : ℝ → ℝ → ℝ} {x₀ : ℝ} {t₀ T : ℝ}
     (hT : t₀ ≤ T) (hfl : ∀ t ∈ Set.Icc t₀ T, LipschitzWith K (fun y => f t y))
     (hx1 : SolutionExists f x₀ x t₀ T (Set.Icc t₀ T))
