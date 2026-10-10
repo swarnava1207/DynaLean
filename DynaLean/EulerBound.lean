@@ -255,15 +255,251 @@ theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M 
       rw [htn, show (K : ℝ) * ((n : ℝ) * (S.δ : ℝ)) = (n : ℝ) * ((K : ℝ) * (S.δ : ℝ)) from by ring]
       ring
 
+theorem euler_bound_solution_iterate {ε : ℚ} (y : ℝ → ℝ) (K : NNReal) (M : ℚ)
+      (hT : t₀ < T)
+      (hx : SolutionExists f (x0 : ℝ) y (t₀ : ℝ) (T : ℝ)
+              (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (m : ℚ → ℚ → ℚ)
+      (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : NNReal) (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo (t₀ : ℝ) (T: ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
+      (S : Scheme) (hS : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0) :
+      ∀ n ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊),
+       |y (S.t (n + 1)) - S.x (n+1)| ≤ |y (S.t (n)) - S.x (n)|
+        * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
+      set N : ℕ := ⌊(T - S.t₀) / S.δ⌋₊ with hNdef
+      have hε : (0 : ℝ) ≤ ε := le_trans (b := |f 0 0 - m 0 0|) (by grind) (by exact_mod_cast hf 0 0)
+      -- grid points, in ℚ
+      have htQ : ∀ j : ℕ, S.t j = t₀ + (j : ℚ) * S.δ := by
+        intro j; rw [Scheme.t_succ', hS.2.1]
+      have hqnn : (0 : ℚ) ≤ (T - S.t₀) / S.δ := by
+        rw [hS.2.1]; exact div_nonneg (by linarith) S.hδ.le
+      have hle : ∀ j : ℕ, j ≤ N → S.t j ≤ T := by
+        intro j hj
+        rw [hNdef] at hj
+        have h1 : ((j : ℕ) : ℚ) ≤ (T - S.t₀) / S.δ := (Nat.le_floor_iff hqnn).mp hj
+        rw [hS.2.1] at h1
+        have h2 : (j : ℚ) * S.δ ≤ T - t₀ := (le_div_iff₀ S.hδ).mp h1
+        rw [htQ]; linarith
+      have hge : ∀ j : ℕ, t₀ ≤ S.t j := by
+        intro j
+        have : (0 : ℚ) ≤ (j : ℚ) * S.δ := mul_nonneg (by positivity) S.hδ.le
+        rw [htQ]; linarith
+      set e := fun n => |y (S.t n) - S.x n| with heq
+      intro n hn
+      have hnN : n < N := by grind
+      have hmain : ∀ i ∈ Finset.range N,
+          e (i + 1) ≤ e i * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
+        intro i hi
+        have hiN : i < N := Finset.mem_range.mp hi
+        rw [heq]
+        simp only
+        have hne : (S.δ : ℝ) ≠ 0 := by rw [Rat.cast_ne_zero]; exact S.hδ.ne'
+        have hδR : (0 : ℝ) < ((S.δ : ℚ) : ℝ) := by exact_mod_cast S.hδ
+        have hab : ((S.t i : ℚ) : ℝ) < ((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) := by linarith
+        -- the step interval sits inside `[t₀, T]`
+        have hstep : (S.t i : ℚ) + S.δ = S.t (i + 1) := by
+          rw [htQ, htQ]; push_cast; ring
+        have hti : ((t₀ : ℚ) : ℝ) ≤ ((S.t i : ℚ) : ℝ) := by exact_mod_cast hge i
+        have htiT : ((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) ≤ ((T : ℚ) : ℝ) := by
+          have h := hle (i + 1) (by omega)
+          rw [← hstep] at h
+          exact_mod_cast h
+        have hIcc : Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))
+            ⊆ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := Set.Icc_subset_Icc hti htiT
+        have hIuIcc : Set.uIcc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))
+            ⊆ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := by
+          rw [Set.uIcc_of_le hab.le]; exact hIcc
+        -- `y'` is differentiable on the interior of the step, from `ContDiffOn ℝ 2`
+        have hd1 : ContDiffOn ℝ 1
+            (derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))))
+            (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) :=
+          (hcont.mono hIcc).derivWithin (uniqueDiffOn_Icc hab) (by decide)
+        have hy'' : DifferentiableOn ℝ
+            (iteratedDerivWithin 1 y
+              (Set.uIcc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))))
+            (Set.uIoo ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) := by
+          rw [iteratedDerivWithin_one, Set.uIcc_of_le hab.le, Set.uIoo_of_le hab.le]
+          exact (hd1.differentiableOn one_ne_zero).mono Set.Ioo_subset_Icc_self
+        obtain ⟨c, hc, hcp⟩ :=
+          taylor_upto_two (t := ((S.t i : ℚ) : ℝ)) (k := ((S.δ : ℚ) : ℝ)) y
+            (hcont := (hcont.mono hIuIcc).of_le (by decide)) hne hy''
+        -- the mean value point is interior, hence interior to `[t₀, T]`
+        have hc' : c ∈ Set.Ioo ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)) := by
+          rwa [Set.uIoo_of_le hab.le] at hc
+        have hcT : c ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) :=
+          ⟨lt_of_le_of_lt hti hc'.1, lt_of_lt_of_le hc'.2 htiT⟩
+        have hcCD : ContDiffAt ℝ 2 y c := hcont.contDiffAt (Icc_mem_nhds hcT.1 hcT.2)
+        -- the Euler direction really is `derivWithin y` at the left endpoint
+        have hderiv : derivWithin y (Set.uIcc (S.t i) (S.t i + S.δ)) (S.t i)
+            = f (S.t i) (y (S.t i)) := by
+            have hmem : ((S.t i : ℚ) : ℝ) ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) :=
+              ⟨hti, by linarith⟩
+            rw [Set.uIcc_of_le hab.le]
+            exact ((hx.2 _ hmem).mono hIcc).derivWithin
+              (uniqueDiffOn_Icc hab _ (Set.left_mem_Icc.mpr hab.le))
+        calc
+            |y (S.t (i + 1)) - S.x (i + 1)|
+                  = |y (S.t i + S.δ) - (S.x i + S.δ * S.m (S.t i) (S.x i))| := by
+                    rw [Scheme.t_succ, Scheme.x_succ]; push_cast; ring
+            _ = |y (S.t i) + iteratedDerivWithin 1 y (Set.uIcc (S.t i) (S.t i + S.δ)) (S.t i) * S.δ
+                  + iteratedDerivWithin 2 y (Set.uIcc (S.t i) (S.t i + S.δ)) c * S.δ^2 / 2
+                  - (S.x i + S.δ * S.m (S.t i) (S.x i))| := by rw [hcp]
+            _ = |y (S.t i) + derivWithin y (Set.uIcc (S.t i) (S.t i + S.δ)) (S.t i) * S.δ
+                  + iteratedDerivWithin 2 y (Set.uIcc (S.t i) (S.t i + S.δ)) c * S.δ^2 / 2
+                  - (S.x i + S.δ * S.m (S.t i) (S.x i))| := by
+                    simp only [iteratedDerivWithin_one]
+            _ = |y (S.t i) + f (S.t i) (y (S.t i)) * S.δ
+                  + iteratedDerivWithin 2 y (Set.uIcc (S.t i) (S.t i + S.δ)) c * S.δ^2 / 2
+                  - (S.x i + S.δ * S.m (S.t i) (S.x i))| := by rw [hderiv]
+            _ = |y (S.t i) + f (S.t i) (y (S.t i)) * S.δ
+                  - (S.x i + S.δ * S.m (S.t i) (S.x i))
+                  + iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                        rw [iteratedDerivWithin_eq_iteratedDeriv _ _
+                              (Set.uIoo_subset_uIcc_self hc)]
+                        · ring_nf
+                        · rw [Set.uIcc_of_le hab.le]
+                          exact uniqueDiffOn_Icc hab
+                        · exact hcCD
+            _ ≤ |y (S.t i) + f (S.t i) (y (S.t i)) * S.δ
+                  - (S.x i + S.δ * S.m (S.t i) (S.x i))|
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                    apply abs_add_le
+            _ ≤ |(y (S.t i) - S.x i) + S.δ * (f (S.t i) (y (S.t i)) - S.m (S.t i) (S.x i))|
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                  grind
+            _ ≤ |y (S.t i) - S.x i| + |S.δ * (f (S.t i) (y (S.t i)) - S.m (S.t i) (S.x i))|
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                    grind
+            _ ≤ |y (S.t i) - S.x i| + S.δ * |f (S.t i) (y (S.t i)) - S.m (S.t i) (S.x i)|
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                    apply add_le_add_left
+                    apply add_le_add_right
+                    rw [abs_mul]
+                    rw [abs_of_pos (by exact_mod_cast S.hδ)]
+            _ ≤ |y (S.t i) - S.x i| + S.δ * (|f (S.t i) (y (S.t i)) - f (S.t i) (S.x i)
+                  + f (S.t i) (S.x i) - S.m (S.t i) (S.x i)|)
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                    apply add_le_add_left
+                    apply add_le_add_right
+                    grind
+            _ ≤ |y (S.t i) - S.x i| + S.δ * (|f (S.t i) (y (S.t i)) - f (S.t i) (S.x i)|
+                  + |f (S.t i) (S.x i) - S.m (S.t i) (S.x i)|)
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                    apply add_le_add_left
+                    apply add_le_add_right
+                    apply mul_le_mul_of_nonneg_left _ (by exact_mod_cast S.hδ.le)
+                    grind
+            _ ≤ |y (S.t i) - S.x i| + S.δ * (K * |y (S.t i) - S.x i| + ε)
+                  + |iteratedDeriv 2 y c * S.δ^2 / 2| := by
+                  apply add_le_add_left
+                  apply add_le_add_right
+                  apply mul_le_mul_of_nonneg_left _ (by exact_mod_cast S.hδ.le)
+                  apply add_le_add
+                  · specialize hK (S.t i) (by grind)
+                    set g := fun x => f (S.t i) x with hg
+                    have hg' : ∀ x , g x = f (S.t i) x := by grind
+                    rw [← hg', ← hg']
+                    simp only [← Real.dist_eq]
+                    exact hK.dist_le_mul (y (S.t i)) (S.x i)
+                  · rw [hS.1]
+                    exact hf (S.t i) (S.x i)
+            _ ≤ |y (S.t i) - S.x i| + S.δ * (K * |y (S.t i) - S.x i| + ε)
+                  + M * S.δ^2 / 2 := by
+                    rw [add_assoc, add_assoc]
+                    apply add_le_add_right
+                    apply add_le_add_right
+                    have hM : |iteratedDeriv 2 y c| ≤ (M : ℝ) := hM c hcT
+                    field_simp; ring_nf
+                    rw [abs_mul]; simp only [abs_mul, abs_pow, sq_abs, one_div, abs_inv,
+                      Nat.abs_ofNat, ne_eq, OfNat.ofNat_ne_zero, not_false_eq_true,
+                      inv_mul_cancel_right₀]
+                    rw [mul_comm]
+                    apply mul_le_mul_of_nonneg_left hM
+                    exact pow_two_nonneg (S.δ : ℝ)
+            _ = |y (S.t i) - S.x i| * (1 + S.δ * K) + (ε + M * S.δ / 2) * S.δ := by
+                    grind
+            _ = e i * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
+                  rw [heq]
+                  simp only [add_left_inj, mul_eq_mul_left_iff, add_right_inj, abs_eq_zero]
+                  apply Or.inl; grind
+      exact hmain n hn
+
+theorem euler_bound_solution_rational {y} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
+      (hKne : K > (0 : ℝ))
+      (hx : SolutionExists f (x0 : ℝ) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
+              (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (S : Scheme) (hT : t₀ < T)
+      (hf : ∀ t x : ℚ, |f t x - S.m t x| ≤ ε)
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : ℝ).toNNReal (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
+      (hS : S.t₀ = t₀ ∧ S.x₀ = x0)
+      : ∀ n ∈ Finset.range (⌊(T - t₀)/S.δ⌋₊ + 1),
+          |y ↑(S.t n) - ↑(S.x n)| ≤
+          ((↑ε + ↑M * ↑S.δ / 2) * ↑S.δ) * (((1 + K*S.δ) ^ n) - 1)/(K * S.δ) := by
+            have heuler := euler_bound_solution_iterate
+              y (K : ℝ).toNNReal M hT hx hcont S.m hf hK hM S (And.intro rfl hS)
+            have heps : (0 : ℝ) ≤ (ε : ℝ) := le_trans (b := |f 0 0 - S.m 0 0|) (by grind)
+                                              (by exact_mod_cast hf 0 0)
+            have hδ := S.hδ
+            intro n hn
+            have hu : (∀ n ≥ 0,
+    (if n + 1 ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊ + 1)
+    then |y ↑(S.t (n + 1)) - ↑(S.x (n + 1))| else 0) ≤
+      ((1 + ↑K * ↑S.δ) * if n ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊ + 1)
+      then |y ↑(S.t n) - ↑(S.x n)| else 0) +
+        (↑ε + ↑M * ↑S.δ / 2) * ↑S.δ) := by
+              intro n hn
+              by_cases h : n + 1 ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊ + 1)
+              · simp only [ite_eq_left h]
+                have g : n ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊ + 1) := by
+                  have hlt : n + 1 ≤ ⌊(T - S.t₀) / S.δ⌋₊ + 1 := by grind
+                  have hlt' : n < ⌊(T - S.t₀) / S.δ⌋₊ + 1 := Nat.lt_of_succ_le hlt
+                  exact Finset.mem_range.mpr hlt'
+                simp only [ite_eq_left g]
+                specialize heuler n (by grind)
+                have triv : ((K : ℝ).toNNReal : ℝ) = (K : ℝ) := by
+                  simp only [Real.toNNReal]; simp only [NNReal.coe_mk,
+                  sup_eq_left, Rat.cast_nonneg]; exact_mod_cast hKne.le
+                grind
+              · simp only [ite_eq_right h]
+                have triv : 0 < K := by exact_mod_cast hKne
+                positivity
+            have triv : 0 < K := by exact_mod_cast hKne
+            have fin := discrete_gronwall_prod_general (n₀ := 0) (n := n)
+             (u := fun n => if n ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊ + 1)
+             then |y ↑(S.t n) - ↑(S.x n)| else 0)
+             (b := fun n => (ε + M * S.δ/2) * S.δ) (c := fun n => 1 + K * S.δ) hu
+             (by intro n hn; positivity) (by grind)
+            rw [hS.1, ite_eq_left hn] at fin
+            rw [ite_eq_left] at fin
+            · simp only [Scheme.t, Scheme.x] at fin
+              simp only [hS.1, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast, CharP.cast_eq_zero,
+              zero_mul, add_zero, hS.2,
+      Nat.Ico_zero_eq_range, Finset.prod_const, Finset.card_range, Nat.card_Ico, hx.1] at fin
+              simp only [sub_self, abs_zero, zero_mul, zero_add] at fin
+              rw [← Finset.mul_sum] at fin
+              rw [Finset.sum_congr rfl
+              (by intro i hi; rw [show n - (i + 1) = n - 1 - i by omega])] at fin
+              have : (K : ℝ) * S.δ > 0 := by positivity
+              rw [Finset.sum_range_reflect, geom_sum_eq (by grind)] at fin
+              simp only [add_sub_cancel_left] at fin
+              simp only [Scheme.t, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast, ge_iff_le]
+              grind
+            · grind
+
+
+
+
+
+
 
 /-- Construct an Euler scheme whose final grid point is `T`. -/
 def LastSchema (t₀ T : ℚ) (x0 : ℚ) (m : ℚ → ℚ → ℚ) (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T) : Scheme where
   δ := (T - t₀) / N
-  hδ := by
-    have hN : (0 : ℚ) < N := by simp only [Nat.cast_pos]; grind
-    have hTt : (0 : ℚ) < T - t₀ := by linarith
-    have hdiv : (0 : ℚ) < (T - t₀) / N := by exact_mod_cast div_pos hTt hN
-    exact_mod_cast hdiv
+  hδ := by positivity
   t₀ := t₀
   x₀ := x0
   m := m

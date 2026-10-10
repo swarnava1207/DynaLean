@@ -118,4 +118,37 @@ theorem pl_grid (n : ℕ) : S.pl (S.t n) = S.x n := by
   rw [S.pl_eq_plOn_of_mem_Ico (le_refl _) (by rw [t_succ]; linarith [S.hδ]),
       plOn_left]
 
+theorem time_mem (T : ℚ) (hT : S.t₀ ≤ T) :
+ ∀ n ∈ Finset.range (⌊(T - S.t₀)/S.δ⌋₊ + 1), (S.t n : ℝ) ∈ Set.Icc (S.t₀ : ℝ) (T : ℝ) := by
+ intro n hn
+ induction n with
+ | zero => simp only [t, CharP.cast_eq_zero, zero_mul, add_zero, Set.mem_Icc, Std.le_refl,
+   Rat.cast_le, hT, and_self]
+ | succ n ih =>
+    specialize ih (by grind)
+    have from_ih : (S.t (n + 1) : ℝ) = S.t n + S.δ := by simp [t, add_mul]; ring
+    rw [from_ih]
+    rw [Set.mem_Icc]
+    apply And.intro (le_trans ih.1 (by apply le_add_of_nonneg_right (by exact_mod_cast S.hδ.le)))
+    have hnf : n + 1 < ⌊(T - S.t₀)/S.δ⌋₊ + 1 := Finset.mem_range.1 hn
+    simp only [t, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast, ge_iff_le]
+    have : n + 1 ≤ (T - S.t₀)/S.δ := by
+      norm_cast
+      apply Nat.le_of_lt_succ at hnf
+      rw [← Nat.le_floor_iff' (by grind)]
+      exact hnf
+    norm_cast
+    rw [le_div_iff₀ S.hδ] at this
+    grind
+
+
+
+
+
+
+
+
+#search "a/b >= c iff a >= bc?"
+
+
 end Scheme
