@@ -200,6 +200,92 @@ theorem convex_rule_exists_refinement {K ε M x₀ t₀ T : ℚ} {S : Scheme}
           exists z
 
 
+def refinement_monotone (S : Scheme) (ε M K t₀ T : ℚ) (n : ℕ)
+  (hn : n ∈ Finset.range (⌊(T - t₀) / S.δ⌋₊ + 1)) : ℚ :=
+  match n with
+  | 0 => S.x₀
+  | n + 1 =>
+    max (S.x (n + 1)) (refinement_monotone S ε M K t₀ T n (by grind))
+
+
+lemma ineq {a y p w Y q : ℝ} (h : |a - y| ≤ p) (g : |w - Y| ≤ q) (k : y ≤ Y)
+  : |max a w - Y| ≤ max p q := by
+  by_cases h' : max a w = a
+  · rw [h']
+    grind
+  · grind
+
+theorem refinement_monotone_satisfy {K ε M x₀ t₀ T : ℚ} {S : Scheme}
+    (hx : SolutionExists f x₀ x t₀ T (Set.Icc (t₀ : ℝ) T)) (hMne : M > 0) (hK : K > (0 : ℝ))
+    (hcont : ContDiffOn ℝ 2 x (Set.Icc (t₀ : ℝ) T)) (hT : t₀ < T)
+    (hlip : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : ℝ).toNNReal fun y => f t y)
+    (hm : ∀ t y : ℚ, |f t y - S.m t y| ≤ ε)
+    (hiter : ∀ t ∈ Set.Ioo (t₀:ℝ) T, |iteratedDeriv 2 x t| ≤ M)
+    (hxn : ∀ n ∈ Finset.range (⌊(T - t₀)/S.δ⌋₊), x (S.t n) ≤ x (S.t (n + 1)))
+    (hS : S.t₀ = t₀ ∧ S.x₀ = x₀) (hn' : n + 1 ∈ Finset.range (⌊(T - t₀)/S.δ⌋₊ + 1)) :
+    refinement_monotone S ε M K t₀ T n (by grind) ≤ refinement_monotone S ε M K t₀ T (n + 1) hn'
+    ∧ |refinement_monotone S ε M K t₀ T n (by grind) - x (S.t n)| ≤
+    (ε + M * S.δ/2) * (S.δ : ℝ) * (((1 + K*S.δ) ^ n) - 1)/(K * S.δ)
+    := by
+    have heps : (0 : ℝ) ≤ (ε : ℝ) := le_trans (b := |f 0 0 - S.m 0 0|) (by grind)
+                                              (by exact_mod_cast hm 0 0)
+    have hδ : 0 < S.δ := S.hδ
+    have hKq : 0 < K := by exact_mod_cast hK
+    have hepsQ : (0 : ℚ) ≤ ε := by exact_mod_cast heps
+    constructor
+    · match h : n with
+      | 0 => simp only [refinement_monotone, Scheme.x, Scheme.t, CharP.cast_eq_zero, zero_mul,
+      add_zero, le_max_iff, le_add_iff_nonneg_right, Std.le_refl,
+      or_true]
+      | m + 1 =>
+        set em := refinement_monotone S ε M K t₀ T (m + 1) (by grind) with hem
+        unfold refinement_monotone
+        rw [← hem]
+        grind
+    · set bound := (ε + M * S.δ/2) * S.δ * (((1 + K*S.δ) ^ n) - 1)/(K * S.δ) with hbound
+      have hboundR : (bound : ℝ) = (ε + M * S.δ/2) * (S.δ : ℝ) * (((1 + K*S.δ) ^ n) - 1)/(K * S.δ)
+        := by exact_mod_cast rfl
+      rw [← hboundR]
+      induction n with
+      | zero =>
+        simp only [refinement_monotone, Scheme.t, CharP.cast_eq_zero, zero_mul, add_zero]
+        rw [hS.1, hS.2, hx.1]
+        simp only [sub_self, abs_zero, Rat.cast_nonneg]
+        simp [bound]
+      | succ m ih =>
+        specialize ih (by grind)
+        simp only [Rat.cast_div, Rat.cast_mul, Rat.cast_add, Rat.cast_ofNat, Rat.cast_sub,
+          Rat.cast_pow, Rat.cast_one, Scheme.t, Rat.cast_natCast, ge_iff_le,
+          forall_const] at ih
+        set bound' := (ε + M * S.δ/2) * S.δ * (((1 + K*S.δ) ^ m) - 1)/(K * S.δ) with hbound'
+        have hboundR' : (bound' : ℝ) =
+        (ε + M * S.δ/2) * (S.δ : ℝ) * (((1 + K*S.δ) ^ m) - 1)/(K * S.δ)
+          := by exact_mod_cast rfl
+        rw [← hboundR'] at ih
+        have this : refinement_monotone S ε M K t₀ T (m + 1) (by grind)
+        = max (refinement_monotone S ε M K t₀ T m (by grind)) (S.x (m + 1)) := by
+          simp only [refinement_monotone]
+          grind
+        rw [this]
+        have this2 : (bound : ℝ) = max (bound' : ℝ) (bound : ℝ) := by
+          simp only [hboundR, hboundR']
+          rw [max_eq_right]
+          field_simp
+          gcongr
+          · simp only [le_add_iff_nonneg_right]; positivity
+          · grind
+        rw [this2]
+        push_cast
+        apply ineq (y := x (S.t m)) (Y := x (S.t (m + 1)))
+        · simp only [Scheme.t, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast]
+          grind
+        · have hwant := euler_bound_solution_rational M hMne hK hx hcont S hT hm hlip hiter hS
+            (m + 1) (by grind)
+          rw [← hboundR] at hwant
+          grind
+        · specialize hxn m (by grind)
+          grind
+
 def egScheme : Scheme := {
   t₀ := 0
   x₀ := 1

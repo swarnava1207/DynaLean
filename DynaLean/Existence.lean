@@ -491,9 +491,9 @@ theorem uniqueness_of_solution_of_lipschitzOn_box {K x y} {f : ℝ → ℝ → �
     (hx1 : SolutionExists f x₀ x t₀ T (Set.Icc t₀ T))
     (hx2 : SolutionExists f x₀ y t₀ T (Set.Icc t₀ T)) : EqOn x y (Set.Icc t₀ T) := by
     have h1 : ∀ t ∈ Set.Icc t₀ T, x t ≤ y t := by
-      apply comparison_first_order (f := f) K hfl x y hT (by grind) hx1 hx2
+      apply comparison_first_order (f := f) K hfl x y hT (by grind) (by grind) hx1 hx2
     have h2 : ∀ t ∈ Set.Icc t₀ T, y t ≤ x t := by
-      apply comparison_first_order (f := f) K hfl y x hT (by grind) hx2 hx1
+      apply comparison_first_order (f := f) K hfl y x hT (by grind) (by grind) hx2 hx1
     intro t ht
     specialize h1 t ht
     specialize h2 t ht

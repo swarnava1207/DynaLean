@@ -8,10 +8,10 @@ namespace ODE
 and the second is Lipschitz in the state variable. -/
 theorem comparison_first_order {g : ℝ → ℝ → ℝ} (K : NNReal)
       (hl : ∀ t ∈ Set.Icc t₀ T, LipschitzWith K (fun x => g t x)) (x : ℝ → ℝ) (y : ℝ → ℝ)
-      (ht : t₀ ≤ T)
+      (ht : t₀ ≤ T) (hx0 : x0 ≤ y0)
       (hb : ∀ t ∈ Set.Icc t₀ T, f t (x t) ≤ g t (x t))
       (hxe : SolutionExists f x0 x t₀ T (Set.Icc t₀ T))
-      (hye : SolutionExists g x0 y t₀ T (Set.Icc t₀ T))
+      (hye : SolutionExists g y0 y t₀ T (Set.Icc t₀ T))
        : ∀ t ∈ Set.Icc t₀ T, x t ≤ y t := by
       intro t ht
       let z := fun s ↦ x s - y s
