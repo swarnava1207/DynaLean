@@ -1,7 +1,10 @@
-import Mathlib
-import DynaLean.Defs
-import DynaLean.Comparison
+module
 
+public import Mathlib
+public import DynaLean.Defs
+public import DynaLean.Comparison
+
+@[expose] public section
 /-!-/
 namespace ODE
 

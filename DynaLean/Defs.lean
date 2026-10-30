@@ -1,13 +1,44 @@
-import Mathlib
+module
+
+public import Mathlib
 set_option linter.style.header false
+
+
+@[expose] public section
+
 namespace ODE
-
-
+section OneDDef
 variable (f : ℝ → ℝ → ℝ) (x₀ : ℝ)
 
 /-- A predicate expressing that `x` solves the ODE driven by `f` on an interval. -/
 def SolutionExists (x : ℝ → ℝ) (t₀ t₁ : ℝ) (s : Set ℝ) : Prop :=
   x t₀ = x₀ ∧ ∀ t ∈ Set.Icc t₀ t₁, HasDerivWithinAt x (f t (x t)) s t
+end OneDDef
+
+section nDDef
+open Lean Meta Elab Term
+
+syntax atomic("ℝ^"term) : term
+syntax atomic("ℚ^"term) : term
+
+elab_rules : term
+  | `(term| ℝ^$n) => do
+  let n ← elabTerm n none
+  let t ← mkAppM ``Fin #[n]
+  Term.synthesizeSyntheticMVarsNoPostponing
+  let t ← mkAppM ``EuclideanSpace #[mkConst ``Real , t]
+  return t
+  | `(term| ℚ^$n) => do
+  let n ← elabTerm n none
+  let t ← mkAppM ``Fin #[n]
+  Term.synthesizeSyntheticMVarsNoPostponing
+  let t ← mkAppM ``EuclideanSpace #[mkConst ``Rat , t]
+  return t
+
+def SolutionExistsVector {n : ℕ} (f : ℝ → (ℝ^n) → ℝ^n) (x₀ : ℝ^n)
+ (x : ℝ → ℝ^n) (t₀ t₁ : ℝ) (s : Set ℝ) : Prop :=
+  x t₀ = x₀ ∧ ∀ t ∈ Set.Icc t₀ t₁, HasDerivWithinAt x (f t (x t)) s t
+end nDDef
 
 /-! ## Clamping a real number into an interval -/
 

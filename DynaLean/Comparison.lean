@@ -1,5 +1,9 @@
-import Mathlib
-import DynaLean.Defs
+module
+
+public import Mathlib
+public import DynaLean.Defs
+
+@[expose] public section
 open Topology
 
 namespace ODE

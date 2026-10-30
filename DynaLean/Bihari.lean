@@ -1,7 +1,9 @@
-import Mathlib
-import DynaLean.Defs
+module
 
+public import Mathlib
+public import DynaLean.Defs
 
+@[expose] public section
 variable {f : ℝ → ℝ → ℝ}
 
 namespace ODE

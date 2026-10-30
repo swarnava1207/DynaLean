@@ -1,2 +1,4 @@
-import DynaLean.Basic
-import DynaLean.Defs
+module
+
+public import DynaLean.Basic
+public import DynaLean.Defs

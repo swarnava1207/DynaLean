@@ -1,4 +1,9 @@
-import Mathlib
+module
+
+public import Mathlib
+public import DynaLean.Defs
+
+@[expose] public section
 
 /-- The Euler schema initial details packed as a `structure` -/
 structure Scheme where
@@ -140,15 +145,151 @@ theorem time_mem (T : ℚ) (hT : S.t₀ ≤ T) :
     norm_cast
     rw [le_div_iff₀ S.hδ] at this
     grind
-
-
-
-
-
-
-
-
-#search "a/b >= c iff a >= bc?"
-
-
 end Scheme
+
+section VectorScheme
+
+structure VectorScheme (n : ℕ) where
+  δ : ℚ
+  hδ : 0 < δ
+  t₀ : ℚ
+  x₀ : ℚ^n
+  m  : ℚ → (ℚ^n) → ℚ^n
+
+
+namespace VectorScheme
+variable {k : ℕ} (S : VectorScheme k)
+
+def t (k : ℕ) : ℚ := S.t₀ + (k : ℚ) * S.δ
+
+def x : ℕ → ℚ^k
+  | 0     => S.x₀
+  | k + 1 => x k + S.δ • S.m (S.t k) (x k)
+
+
+/-- The affine piece carried by the `n`-th subinterval `[tₙ, tₙ₊₁]`,
+evaluated at an arbitrary time `s`. -/
+def lOn (m : ℕ) (s : ℚ) : ℚ^k :=
+  S.x m + (s - S.t m) • (S.m (S.t m) (S.x m))
+
+/-- Index of the subinterval containing `s`: the unique `n` with
+`tₙ ≤ s < tₙ₊₁` when `s ≥ t₀`, and `0` for `s < t₀`. -/
+def idx (s : ℚ) : ℕ := ⌊(s - S.t₀) / S.δ⌋.toNat
+
+/-- The piecewise-linear interpolant `x̃`. Computable: every ingredient is rational. -/
+def pl (s : ℚ) : ℚ^k := S.lOn (S.idx s) s
+
+/-- Interpolant clamped to the first `N` steps (constant-slope extension past `t_N`
+is avoided; useful when the theorem is stated on `[t₀, T]` with `T = t_N`). -/
+def plClamp (N : ℕ) (s : ℚ) : ℚ^k := S.lOn (min N (S.idx s)) s
+
+
+instance {n : ℕ} : Coe (ℚ^n) (ℝ^n) where
+  coe := fun x => (WithLp.equiv 2 (Fin n → ℝ)).symm (fun i => (x i : ℝ))
+
+/-- Real-valued view of the interpolant, for comparison with the exact solution. -/
+def plR (s : ℚ) : ℝ^k := (S.pl s : ℝ^k)
+
+/-! ### Basic rewriting lemmas -/
+
+/-- The first grid time is the initial time. -/
+@[simp] theorem t_zero : S.t 0 = S.t₀ := by simp [t]
+
+/-- Each successive grid time is one step size after the preceding time. -/
+theorem t_succ (n : ℕ) : S.t (n + 1) = S.t n + S.δ := by
+  simp [t, add_mul]; ring
+
+/-- The grid-time definition expanded into its closed form. -/
+theorem t_succ' (n : ℕ) : S.t n = S.t₀ + (n : ℚ) * S.δ := by
+  induction n with
+  | zero => simp [t]
+  | succ n ih =>
+      have : S.t (n + 1) = S.t n + S.δ := by simp [t, add_mul]; ring
+      rw [this, ih]
+      push_cast
+      ring
+
+/-- The zeroth Euler iterate is the initial value. -/
+@[simp] theorem x_zero : S.x 0 = S.x₀ := rfl
+
+/-- Each Euler iterate is obtained from the preceding iterate by one Euler step. -/
+@[simp] theorem x_succ (n : ℕ) : S.x (n + 1) = S.x n + S.δ • S.m (S.t n) (S.x n) := rfl
+
+/-- The affine piece starts at the Euler iterate for its left endpoint. -/
+@[simp] theorem plOn_left (n : ℕ) : S.lOn n (S.t n) = S.x n := by
+  simp only [lOn, t, sub_self]
+  simp only [zero_smul, add_zero]
+
+/-- The pieces agree at the shared node: the interpolant is continuous. -/
+theorem plOn_right (n : ℕ) : S.lOn n (S.t (n + 1)) = S.x (n + 1) := by
+  simp only [lOn, t_succ, add_sub_cancel_left, x_succ]
+
+/-- On its own subinterval, `idx` picks out the right piece. -/
+theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
+    S.idx s = n := by
+  unfold idx
+  have triv : (S.t n - S.t₀)/ S.δ = (n : ℚ) := by
+    calc
+      (S.t n - S.t₀)/S.δ = ((S.t₀ + (n : ℚ) * S.δ) - S.t₀)/S.δ := by simp [t]
+      _ = (n : ℚ) * S.δ / S.δ := by ring
+      _ = (n : ℚ) := by field_simp [S.hδ.ne']
+  by_cases h : (s - S.t₀) / S.δ < 0
+  · have : S.t n ≥ S.t₀ := by simp [t, hδ]
+    have : S.t n ≤ s := by linarith
+    have : s < S.t₀ := by field_simp [t, hδ] at h; linarith
+    grind
+  · have : (s - S.t₀)/S.δ = (s - S.t n)/S.δ + (n : ℚ) := by
+      calc
+        (s - S.t₀)/S.δ = (s - S.t n)/S.δ + (S.t n - S.t₀)/S.δ := by field_simp [t, hδ]; grind
+        _ = (s - S.t n)/S.δ + (n : ℚ) := by grind
+    rw [this]
+    rw [Int.floor_add_natCast]
+    have ge_0 : 0 ≤ (s - S.t n)/S.δ := by
+        rw [div_nonneg_iff]
+        apply Or.inl
+        apply And.intro (by linarith) S.hδ.le
+    have lt_1 : (s - S.t n)/S.δ < 1 := by
+      calc
+        (s - S.t n)/S.δ < (S.t (n + 1) - S.t n)/S.δ := by
+          apply (div_lt_div_iff_of_pos_right S.hδ ).2; linarith
+        _ = 1 := by simp only [t_succ, add_sub_cancel_left, div_self_eq_one₀, ne_eq]; exact S.hδ.ne'
+    have : Int.floor ((s - S.t n)/S.δ) = 0 := by
+      apply Int.floor_eq_zero_iff.2 ⟨ge_0, lt_1⟩
+    rw [this]; simp only [zero_add, Int.toNat_natCast]
+
+
+/-- On a grid subinterval, the interpolant equals its affine piece. -/
+theorem pl_eq_plOn_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
+    S.pl s = S.lOn n s := by
+  rw [pl, S.idx_eq_of_mem_Ico h₁ h₂]
+
+/-- The interpolant hits the Euler data at every grid point. -/
+theorem pl_grid (n : ℕ) : S.pl (S.t n) = S.x n := by
+  rw [S.pl_eq_plOn_of_mem_Ico (le_refl _) (by rw [t_succ]; linarith [S.hδ]),
+      plOn_left]
+
+theorem time_mem (T : ℚ) (hT : S.t₀ ≤ T) :
+ ∀ n ∈ Finset.range (⌊(T - S.t₀)/S.δ⌋₊ + 1), (S.t n : ℝ) ∈ Set.Icc (S.t₀ : ℝ) (T : ℝ) := by
+ intro n hn
+ induction n with
+ | zero => simp only [t, CharP.cast_eq_zero, zero_mul, add_zero, Set.mem_Icc, Std.le_refl,
+   Rat.cast_le, hT, and_self]
+ | succ n ih =>
+    specialize ih (by grind)
+    have from_ih : (S.t (n + 1) : ℝ) = S.t n + S.δ := by simp [t, add_mul]; ring
+    rw [from_ih]
+    rw [Set.mem_Icc]
+    apply And.intro (le_trans ih.1 (by apply le_add_of_nonneg_right (by exact_mod_cast S.hδ.le)))
+    have hnf : n + 1 < ⌊(T - S.t₀)/S.δ⌋₊ + 1 := Finset.mem_range.1 hn
+    simp only [t, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast, ge_iff_le]
+    have : n + 1 ≤ (T - S.t₀)/S.δ := by
+      norm_cast
+      apply Nat.le_of_lt_succ at hnf
+      rw [← Nat.le_floor_iff' (by grind)]
+      exact hnf
+    norm_cast
+    rw [le_div_iff₀ S.hδ] at this
+    grind
+
+end VectorScheme
+end VectorScheme

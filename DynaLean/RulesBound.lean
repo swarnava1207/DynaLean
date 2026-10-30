@@ -1,9 +1,12 @@
-import Mathlib
-import DynaLean.Defs
-import DynaLean.EulerScheme
-import DynaLean.EulerBound
-import DynaLean.Rules
+module
 
+public import Mathlib
+public import DynaLean.Defs
+public import DynaLean.EulerScheme
+public import DynaLean.EulerBound
+public import DynaLean.Rules
+
+@[expose] public section
 /-!-/
 namespace ODE
 

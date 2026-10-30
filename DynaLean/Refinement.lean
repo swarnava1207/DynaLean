@@ -1,8 +1,11 @@
-import Mathlib
-import DynaLean.Defs
-import DynaLean.EulerScheme
-import DynaLean.EulerBound
+module
 
+public import Mathlib
+public import DynaLean.Defs
+public import DynaLean.EulerScheme
+public import DynaLean.EulerBound
+
+@[expose] public section
 /-!-/
 namespace ODE
 def Rule (S : Set ℝ) (x : ℝ → ℝ) (t₀ T : ℝ) := ∀ t ∈ Set.Icc t₀ T, x t ∈ S

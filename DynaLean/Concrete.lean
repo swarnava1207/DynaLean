@@ -1,3 +1,5 @@
+module
+
 /-
 Concrete bounds on the Euler iterates `S.x n`, tiers 1 and 2.
 
@@ -13,9 +15,12 @@ Architecture, deliberately split three ways:
   2. `mkBoundCmd`  -- pure syntax builder, no `MetaM`, no failure, `#eval`-testable.
   3. `elabDeriveBound` -- generate, elaborate (so the proof is *checked*), then suggest.
 -/
-import Mathlib
-import Lean
+public import Mathlib
+public import Lean
+public meta import DynaLean.EulerScheme
 import DynaLean.EulerScheme
+
+@[expose] public section
 set_option cbv.warning false
 set_option cbv.maxSteps 10000000
 
@@ -26,7 +31,7 @@ open Lean.Meta.Tactic.TryThis (addSuggestion)
 
 /-! ## Scheme prelude
 
-Only the parts the bound machinery needs. Replace this section with an `import` of
+Only the parts the bound machinery needs. Replace this section with an `public import` of
 your own `Scheme` file and delete the duplication. -/
 
 
@@ -49,17 +54,17 @@ No `MetaM`, no failure modes, testable in isolation with `#eval`. This is the la
 that stays fixed when the compute phase changes. -/
 
 /-- A `ℕ` literal as a term. -/
-def natLitT (n : ℕ) : Term := ⟨Syntax.mkNumLit (toString n)⟩
+@[expose] public meta def natLitT (n : ℕ) : Term := ⟨Syntax.mkNumLit (toString n)⟩
 
 /-- A rational literal, ascribed at `ℚ` so it does not default to `ℕ`.
 Emits `(a : ℚ)`, `(-a : ℚ)`, `(a : ℚ) / b` or `(-a : ℚ) / b`. -/
-def ratLit [Monad m] [MonadQuotation m] (q : ℚ) : m Term := do
+@[expose] public meta def ratLit [Monad m] [MonadQuotation m] (q : ℚ) : m Term := do
   let a := natLitT q.num.natAbs
   let signed ← if q.num < 0 then `(-$a) else pure a
   if q.den == 1 then `(($signed : ℚ)) else `(($signed : ℚ) / $(natLitT q.den))
 
 /-- The statement of the generated theorem. -/
-def mkStmt [Monad m] [MonadQuotation m] (S : Term) (n : ℕ) : BoundShape → m Term
+@[expose] public meta def mkStmt [Monad m] [MonadQuotation m] (S : Term) (n : ℕ) : BoundShape → m Term
   | .eq v => do
       let xId := mkIdent `x
       `(($S).$xId $(natLitT n) = $(← ratLit v))
@@ -69,7 +74,7 @@ def mkStmt [Monad m] [MonadQuotation m] (S : Term) (n : ℕ) : BoundShape → m 
       `($(← ratLit lo) ≤ $xn ∧ $xn ≤ $(← ratLit hi))
 
 /-- The full generated command. `prf` is the tactic chosen by the elaborator. -/
-def mkBoundCmd [Monad m] [MonadQuotation m]
+@[expose] public meta def mkBoundCmd [Monad m] [MonadQuotation m]
     (name : Ident) (S : Term) (n : ℕ) (shape : BoundShape) (prf : TSyntax `tactic) :
     m (TSyntax `command) := do
   let stmt ← mkStmt S n shape
@@ -77,7 +82,7 @@ def mkBoundCmd [Monad m] [MonadQuotation m]
 
 /-- Tier 2: round `v` outward to `digits` decimal places.
 Collapses to `.eq` when `v` is exactly representable at that precision. -/
-def roundTo (v : ℚ) (digits : ℕ) : BoundShape :=
+@[expose] public meta def roundTo (v : ℚ) (digits : ℕ) : BoundShape :=
   let D : ℚ := ((10 ^ digits : ℕ) : ℚ)
   let lo : ℚ := ((Rat.floor (v * D) : ℤ) : ℚ) / D
   let hi : ℚ := ((-(Rat.floor (-(v * D))) : ℤ) : ℚ) / D
@@ -90,7 +95,7 @@ syntax (name := deriveBoundCmd)
 
 /-- Elaborate `cmd` speculatively; report whether it succeeded, and restore the
 environment and message log either way. -/
-private def cmdSucceeds (cmd : TSyntax `command) : CommandElabM Bool := do
+@[expose] public meta def cmdSucceeds (cmd : TSyntax `command) : CommandElabM Bool := do
   let saved ← get
   let ok ←
     try
@@ -102,7 +107,7 @@ private def cmdSucceeds (cmd : TSyntax `command) : CommandElabM Bool := do
 
 /-- Proof tactics tried in order. `decide_cbv` should win; the rest are insurance
 against `OfNat`/instance layers that `cbv` declines to unfold. -/
-private def proofCandidates : CommandElabM (Array (TSyntax `tactic)) := do
+@[expose] public meta def proofCandidates : CommandElabM (Array (TSyntax `tactic)) := do
   return #[
     ← `(tactic| decide_cbv),
     ← `(tactic| norm_num [Scheme.x, Scheme.t]),
@@ -111,7 +116,7 @@ private def proofCandidates : CommandElabM (Array (TSyntax `tactic)) := do
   ]
 
 @[command_elab deriveBoundCmd]
-def elabDeriveBound : CommandElab := fun stx => do
+public meta def elabDeriveBound : CommandElab := fun stx => do
   match stx with
   | `(command| #derive_bound $name:ident $S:term $n:num $[digits $k:num]?) => do
     let nVal := n.getNat
