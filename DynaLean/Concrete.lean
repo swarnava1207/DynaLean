@@ -174,7 +174,7 @@ def sqScheme : Scheme where
   m := fun _ x => x ^ 2
 
 -- Tier 1: exact equality.
-#derive_bound eg12 egScheme 12
+#derive_bound eg12 egScheme 200
 
 -- Tier 2: outward-rounded bounds, 2 decimal places.
 #derive_bound q2 qScheme 2 digits 2
