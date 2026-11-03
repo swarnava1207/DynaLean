@@ -292,4 +292,3 @@ theorem time_mem (T : ℚ) (hT : S.t₀ ≤ T) :
     grind
 
 end VectorScheme
-end VectorScheme

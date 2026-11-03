@@ -3,6 +3,7 @@ module
 public import Mathlib
 public import Lean
 public meta import Qq
+public meta import DynaLean.Defs
 public meta import DynaLean.EulerScheme
 import DynaLean.EulerScheme
 
@@ -11,7 +12,7 @@ open Lean Meta Elab Term Tactic Qq
 open Lean.Meta.Tactic.TryThis (addSuggestion)
 open Lean Meta PrettyPrinter
 
-namespace Actual
+section Scalar
 
 inductive HasBound : Scheme → ℕ → ℚ → ℚ → ℚ → ℚ → Prop where
   | zero (S : Scheme) (l h : ℚ) (hyp : S.x₀ ∈ Set.Icc l h): HasBound S 0 l h l h
@@ -161,7 +162,131 @@ def t10 := egScheme.x 200
 #check @egBound
 #check @egExists
 
-theorem check (e : egScheme.x₀ ∈ Set.Icc 0 1) : HasBound egScheme 200 t10 t10 1 1 := by
+theorem check : HasBound egScheme 200 t10 t10 1 1 := by
   apply_bound
+  exact easy
 
-end Actual
+end Scalar
+
+section Vector
+open Metric
+
+variable {k : ℕ}
+inductive HasBoundVec : VectorScheme k → ℕ → (ℚ^k) → ℚ → (ℚ^k) → Prop where
+  | zero (S : VectorScheme k) (c : ℚ^k) (r : ℚ) (hyp : S.x₀ ∈ closedBall c r) :
+    HasBoundVec S 0 c r c
+  | succ (c c₀ : ℚ^k) (r : ℚ) (S : VectorScheme k) (n : ℕ) :
+    HasBoundVec S n c r c₀ →
+    HasBoundVec S (n + 1) (c + S.δ • (S.m (S.t n) (S.x n))) r c₀
+
+
+theorem hasboundvec_implies_bound (S : VectorScheme k) (n : ℕ) (c c₀ : ℚ^k) (r : ℚ) :
+    HasBoundVec S n c r c₀ → S.x n ∈ closedBall c r := fun hyp =>
+  match hyp with
+  | .zero S c r hyp => by simp only [VectorScheme.x];exact hyp
+  | .succ c c₀ r S n hyp => by
+    have : S.x (n + 1) = S.x n + S.δ • (S.m (S.t n) (S.x n)) := by simp only [VectorScheme.x]
+    rw [this]
+    simp only [mem_closedBall, dist_add_right, ge_iff_le]
+    have h1 := hasboundvec_implies_bound S n c c₀ r hyp
+    have h2 : dist (S.x n) c ≤ r := h1
+    exact h2
+
+theorem hasboundvec_congr {k : ℕ} {S : VectorScheme k} {n : ℕ} {c c' c₀ : ℚ^k} {r : ℚ}
+    (h : c = c') (hb : HasBoundVec S n c r c₀) : HasBoundVec S n c' r c₀ := h ▸ hb
+
+meta unsafe def RatOfVec (e : Expr) : MetaM (ℚ^k) := do
+    evalExpr (ℚ^k) (← mkAppM ``EuclideanSpace
+        #[Lean.mkConst ``Rat, (← mkAppM ``Fin #[toExpr k])]) e
+
+meta def mkHasBoundVecProof (S c r c₀ hyp : Expr) : ℕ → MetaM Expr
+  | 0 => mkAppM ``HasBoundVec.zero #[S, c₀, r, hyp]
+  | k + 1 => do
+      let prev ← mkHasBoundVecProof S c r c₀ hyp k
+      mkAppOptM ``HasBoundVec.succ #[none, none, none, none, some S, none, some prev]
+
+elab "apply_bound_vec" : tactic => do
+  let mvarId ← getMainGoal
+  mvarId.withContext do
+    let target ← mvarId.getType
+    let args := target.getAppArgs
+    unless args.size == 6 do
+      throwError "apply_bound_vec: expected 6 arguments, got {args.size}"
+    unless target.getAppFn.constName! == ``HasBoundVec do
+      throwError "apply_bound_vec: expected HasBoundVec, got {target.getAppFn.constName!}"
+    let S := args[1]!
+    let k := (← inferType args[1]!).getAppArgs[0]!
+    let n := args[2]!
+    let c := args[3]!
+    let r := args[4]!
+    let c₀ := args[5]!
+    let nVal ← unsafe evalExpr Nat (Lean.mkConst ``Nat) n
+    let kVal ← unsafe evalExpr Nat (Lean.mkConst ``Nat) k
+    let cTarget ← unsafe RatOfVec (k := kVal) c
+    let rR ← mkAppOptM ``RatCast.ratCast #[some (Lean.mkConst ``Real), none, some r]
+    let iccApp ← mkAppOptM ``closedBall #[some
+      (← mkAppM ``EuclideanSpace #[Lean.mkConst ``Rat , (← mkAppM ``Fin #[k])]), none,
+      some c₀ , some rR]
+    let hypType ← mkAppOptM ``Membership.mem #[none, none, none, some iccApp,
+      some (← mkAppM ``VectorScheme.x₀ #[S])]
+    let hyp ← mkFreshExprMVar hypType
+    let pf ← mkHasBoundVecProof S c r c₀ hyp nVal
+    let pfTy ← instantiateMVars (← inferType pf)
+    let pfArgs := pfTy.getAppArgs
+    let cComp := pfArgs[3]!
+    let cVal ← unsafe RatOfVec (k := kVal) cComp
+    unless cVal == cTarget do
+      throwError "apply_bound_vec: after {nVal} step(s) the scheme reaches \
+        {cComp}, but the goal states {c}"
+    let some schemeName := S.constName?
+      | throwError "apply_bound_vec: the scheme must be a constant, got {S}"
+    let env ← getEnv
+    let fromGoal := c.getUsedConstants.filter fun n =>
+      !n.isInternal
+        && (env.find? n matches some (.defnInfo _))
+        && (env.getModuleIdxFor? n).isNone        -- i.e. defined in this file
+    let unfolds := fromGoal ++ #[schemeName, ``VectorScheme.x, ``VectorScheme.t]
+    let lemmas ← unfolds.mapM fun n =>
+      `(Lean.Parser.Tactic.simpLemma| $(mkIdent n):term)
+    let eqGoal ← mkEq cComp c
+    let eqPf ← elabTermAndSynthesize
+      (← `(by ext i; fin_cases i <;> norm_num [$lemmas,*])) (some eqGoal)
+    Term.synthesizeSyntheticMVarsNoPostponing
+    let eqPf ← instantiateMVars eqPf
+    if eqPf.hasSorry then
+      throwError "apply_bound_vec: failed to prove equality of bounds {cComp} and {c}"
+    let newpf ← mkAppM ``hasboundvec_congr #[eqPf, pf]
+    mvarId.assign newpf
+    let hyps ← getLCtx
+    let mut found := false
+    for hypit in hyps do
+      if hypit.isImplementationDetail then continue
+      let hypTypeit ← instantiateMVars hypit.type
+      if (← isDefEq hypTypeit hypType) then
+        hyp.mvarId!.assign hypit.toExpr
+        found := true
+        break
+    if ¬found then
+      replaceMainGoal [hyp.mvarId!]
+    else
+      replaceMainGoal []
+
+def egSchemeVec : VectorScheme 2 where
+  δ := 1
+  hδ := by norm_num
+  t₀ := 0
+  x₀ := !₂[1, 0]
+  m := fun _ x => x
+
+theorem easyVec : egSchemeVec.x₀ ∈ closedBall !₂[1, 0] (1 : ℚ) := by norm_num; simp [egSchemeVec]
+
+def t10Vec := egSchemeVec.x 20
+#eval t10Vec
+
+theorem checkVec :
+    HasBoundVec egSchemeVec 20 t10Vec 1 !₂[1, 0] := by
+  apply_bound_vec
+  exact easyVec
+
+
+end Vector
