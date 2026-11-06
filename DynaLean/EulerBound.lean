@@ -498,11 +498,6 @@ theorem euler_bound_solution_rational {y} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
             · grind
 
 
-
-
-
-
-
 /-- Construct an Euler scheme whose final grid point is `T`. -/
 def LastSchema (t₀ T : ℚ) (x0 : ℚ) (m : ℚ → ℚ → ℚ) (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T) : Scheme where
   δ := (T - t₀) / N

@@ -35,9 +35,16 @@ elab_rules : term
   let t ← mkAppM ``EuclideanSpace #[mkConst ``Rat , t]
   return t
 
+
+
+instance {n : ℕ} : Coe (ℚ^n) (ℝ^n) where
+  coe := fun x => (WithLp.equiv 2 (Fin n → ℝ)).symm (fun i => (x i : ℝ))
+
 def SolutionExistsVector {n : ℕ} (f : ℝ → (ℝ^n) → ℝ^n) (x₀ : ℝ^n)
  (x : ℝ → ℝ^n) (t₀ t₁ : ℝ) (s : Set ℝ) : Prop :=
   x t₀ = x₀ ∧ ∀ t ∈ Set.Icc t₀ t₁, HasDerivWithinAt x (f t (x t)) s t
+
+
 end nDDef
 
 /-! ## Clamping a real number into an interval -/

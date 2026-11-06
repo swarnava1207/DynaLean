@@ -183,10 +183,6 @@ def pl (s : ℚ) : ℚ^k := S.lOn (S.idx s) s
 is avoided; useful when the theorem is stated on `[t₀, T]` with `T = t_N`). -/
 def plClamp (N : ℕ) (s : ℚ) : ℚ^k := S.lOn (min N (S.idx s)) s
 
-
-instance {n : ℕ} : Coe (ℚ^n) (ℝ^n) where
-  coe := fun x => (WithLp.equiv 2 (Fin n → ℝ)).symm (fun i => (x i : ℝ))
-
 /-- Real-valued view of the interpolant, for comparison with the exact solution. -/
 def plR (s : ℚ) : ℝ^k := (S.pl s : ℝ^k)
 
