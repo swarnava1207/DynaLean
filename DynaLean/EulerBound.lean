@@ -7,9 +7,49 @@ public import DynaLean.EulerScheme
 
 @[expose] public section
 open Topology
+
+/-! # Error bounds for the Euler scheme
+
+The central results of DynaLean. They bound the distance between an exact solution `y`
+of `y' = f t y` and the Euler data produced by a `Scheme` (or `VectorScheme`), in terms
+of three budgets:
+
+* `ε` — the *model error*, `|f t x - m t x| ≤ ε`: how far the scheme's field is from
+  the true one;
+* `M` — a bound on `‖y''‖`, which controls the *local truncation error* of one Euler
+  step (supplied by `DynaLean.Derivations`);
+* `K` — a Lipschitz constant for `f` in its state argument, which controls how fast an
+  error already committed is amplified by later steps.
+
+## Shape of the development
+
+1. `ODE.taylor_upto_two` and `ODE.taylor_lagrange_norm_bound_two` give the one-step
+   Taylor estimate `‖y (t+k) - y t - k·y' t‖ ≤ (k²/2)·M`, in `ℝ` and in a Banach space
+   respectively.
+2. `ODE.euler_bound_solution_iterate` turns that into the *recurrence*
+   `eₙ₊₁ ≤ eₙ (1 + Kδ) + (ε + Mδ/2) δ` for the grid-point error `eₙ`.
+3. `ODE.euler_bound_solution` solves the recurrence crudely, with an `exp (K (t - t₀))`
+   amplification factor; `ODE.euler_bound_solution_rational` solves it sharply via
+   discrete Grönwall, giving the geometric-series form
+   `(ε + Mδ/2) δ · ((1 + Kδ)ⁿ - 1) / (Kδ)`, which is rational in the data and so can be
+   evaluated exactly.
+4. `ODE.euler_bound_cell` extends a grid-point bound to *every* time inside a cell, and
+   `ODE.euler_bound_solution_all` combines the two to bound `‖y s - interpolant s‖` at
+   every `s ∈ [t₀, T]`.
+5. `ODE.LastSchema` builds the scheme with `N` equal steps whose final grid point is
+   exactly `T`, and `ODE.euler_bound_solution_last` specializes the bound to it.
+
+Section `Vector` repeats steps 2-5 for `ℝ^k`-valued solutions; those are the versions
+consumed by `DynaLean.DigitalTwin`.
+-/
+
 namespace ODE
 
-/-- Taylor's theorem with a first-order term and a second-order remainder. -/
+/-- Taylor's theorem with a first-order term and a second-order remainder.
+
+The mean-value form: there is `c` strictly between `t` and `t + k` with
+`y (t + k) = y t + y' t · k + y'' c · k² / 2`, where the derivatives are taken within
+`uIcc t (t + k)`. Specialized from Mathlib's `taylor_mean_remainder_lagrange`. -/
 theorem taylor_upto_two (y : ℝ → ℝ) (hcont : ContDiffOn ℝ 1 y (Set.uIcc t (t + k)))
                         (hk : k ≠ 0)
                         (hy' : DifferentiableOn ℝ (iteratedDerivWithin 1 y (Set.uIcc t (t + k)))
@@ -39,6 +79,14 @@ open Set Filter Topology Interval
 
 variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
 
+/-- Banach-space form of the second-order Taylor estimate: `‖y (t+k) - y t - k • y' t‖
+≤ (k²/2) · M` whenever `‖y''‖ ≤ M` on `(t, t + k)`.
+
+There is no mean-value theorem for vector-valued functions, so instead of
+`ODE.taylor_upto_two` the proof writes the remainder as `∫ s in t..t+k, (y' s - y' t)`,
+bounds the integrand by `M (s - t)` with the segment mean-value *inequality*, and
+integrates. This is the estimate that governs the local truncation error of a single
+Euler step, in both the scalar and the vector development. -/
 theorem taylor_lagrange_norm_bound_two [CompleteSpace E]
     {y y' : ℝ → E} {y'' : ℝ → E}
     {t k M : ℝ} (hk : 0 ≤ k)
@@ -155,9 +203,18 @@ theorem taylor_lagrange_norm_bound_two [CompleteSpace E]
 
 section Scalar
 
+/-! ## Scalar Euler bounds -/
+
 variable {f : ℝ → ℝ → ℝ} {x0 : ℚ} {t₀ T : ℚ}
 
-/-- Bound the global Euler error by accumulating local truncation and model errors. -/
+/-- Bound the global Euler error by accumulating local truncation and model errors.
+
+At every grid point `tₙ` of `[t₀, T]`,
+
+`|y tₙ - xₙ| ≤ (tₙ - t₀) · (ε + M δ / 2) · exp (K (tₙ - t₀))`.
+
+This is the textbook form of the bound. It is convenient to state but lossy; for the
+sharp, exactly rational version use `ODE.euler_bound_solution_rational`. -/
 theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M > 0)
       (hT : t₀ < T)
       (hx : SolutionExists f (x0 : ℝ) y (t₀ : ℝ) (T : ℝ)
@@ -382,6 +439,15 @@ theorem euler_bound_solution (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M 
       rw [htn, show (K : ℝ) * ((n : ℝ) * (S.δ : ℝ)) = (n : ℝ) * ((K : ℝ) * (S.δ : ℝ)) from by ring]
       ring
 
+/-- One step of the Euler error recurrence.
+
+`|y tₙ₊₁ - xₙ₊₁| ≤ |y tₙ - xₙ| · (1 + K δ) + (ε + M δ / 2) · δ`.
+
+The `(1 + K δ)` factor is the amplification of the error already present, coming from
+the Lipschitz hypothesis; the additive term is the new error committed by this step,
+namely `M δ² / 2` of Taylor truncation (`ODE.taylor_lagrange_norm_bound_two`) plus
+`ε δ` of model mismatch. Every global bound in this file is obtained by solving this
+recurrence. -/
 theorem euler_bound_solution_iterate {ε : ℚ} (y : ℝ → ℝ) (K : NNReal) (M : ℚ)
       (hT : t₀ < T)
       (hx : SolutionExists f (x0 : ℝ) y (t₀ : ℝ) (T : ℝ)
@@ -553,6 +619,18 @@ theorem euler_bound_solution_iterate {ε : ℚ} (y : ℝ → ℝ) (K : NNReal) (
                   apply Or.inl; grind
       exact hmain n hn
 
+/-- The sharp, exactly rational global error bound at every grid point:
+
+`|y tₙ - xₙ| ≤ (ε + M δ / 2) · δ · ((1 + K δ)ⁿ - 1) / (K δ)`.
+
+Obtained by closing the recurrence of `ODE.euler_bound_solution_iterate` with discrete
+Grönwall (`discrete_gronwall_prod_general`) and summing the resulting geometric series,
+rather than by overestimating it with an exponential as `ODE.euler_bound_solution`
+does.
+
+Every constant on the right is rational, so the bound is a number a machine can
+produce and check exactly; this is the form consumed by `DynaLean.Refinement`,
+`DynaLean.RulesBound` and `DynaLean.DigitalTwin` (where it appears as `ODE.EB`). -/
 theorem euler_bound_solution_rational {y} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
       (hKne : K > (0 : ℝ))
       (hx : SolutionExists f (x0 : ℝ) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
@@ -618,7 +696,11 @@ theorem euler_bound_solution_rational {y} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
             · grind
 
 
-/-- Construct an Euler scheme whose final grid point is `T`. -/
+/-- Construct an Euler scheme whose final grid point is `T`.
+
+Takes `N` equal steps of size `δ = (T - t₀) / N`, so that `t N = T` exactly and
+`⌊(T - t₀)/δ⌋ = N`. Without this alignment the last grid point would in general fall
+short of `T` and the bounds could say nothing about the right endpoint. -/
 def LastSchema (t₀ T : ℚ) (x0 : ℚ) (m : ℚ → ℚ → ℚ) (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T) : Scheme where
   δ := (T - t₀) / N
   hδ := by positivity
@@ -627,7 +709,11 @@ def LastSchema (t₀ T : ℚ) (x0 : ℚ) (m : ℚ → ℚ → ℚ) (N : ℕ) (hN
   m := m
 
 
-/-- Specialize the Euler error bound to a scheme ending exactly at `T`. -/
+/-- Specialize the Euler error bound to a scheme ending exactly at `T`.
+
+For `S = ODE.LastSchema t₀ T x₀ m N`, the interpolant at the right endpoint satisfies
+`|y T - S.pl T| ≤ (T - t₀) · (ε + M δ / 2) · exp (K (T - t₀))`. This is
+`ODE.euler_bound_solution` evaluated at `n = N`, using `S.t N = T`. -/
 theorem euler_bound_solution_last (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne : M > 0)
       (hx : SolutionExists f (x0 : ℝ) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
               (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
@@ -677,6 +763,16 @@ theorem euler_bound_solution_last (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne
           rw [ht₀] at h
           rwa [htn]
 
+/-- Extend a grid-point error bound to every time *inside* a cell.
+
+For `s` anywhere in `[tᵢ, tᵢ + δ]`, the distance from `y s` to the affine piece
+`xᵢ + (s - tᵢ) · m tᵢ xᵢ` obeys the same right-hand side as the one-step recurrence
+`ODE.euler_bound_solution_iterate`, namely
+`|y tᵢ - xᵢ| · (1 + K δ) + (ε + M δ / 2) · δ`.
+
+Taking `s = tᵢ₊₁` recovers that recurrence; the point of the lemma is the intermediate
+`s`, which is what upgrades a statement about grid points into a statement about the
+whole interpolant (`ODE.euler_bound_solution_all`). -/
 theorem euler_bound_cell {ε : ℚ} (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hM0 : 0 ≤ M)
       (hT : t₀ < T)
       (hx : SolutionExists f (x0 : ℝ) y (t₀ : ℝ) (T : ℝ) (Set.Icc (t₀ : ℝ) (T : ℝ)))
@@ -806,6 +902,16 @@ theorem euler_bound_cell {ε : ℚ} (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hM
   refine le_trans (abs_add_three _ _ _) ?_
   exact le_trans (add_le_add (add_le_add hA le_rfl) hC2) (le_of_eq (by ring))
 
+/-- The global bound, at every time of `[t₀, T]` rather than only at grid points.
+
+For `S = ODE.LastSchema t₀ T x₀ m N` and every `s ∈ [t₀, T]`,
+
+`|y s - S.plRR s| ≤ (ε + M δ / 2) · δ · ((1 + K δ)ᴺ - 1) / (K δ)`,
+
+where `S.plRR` is the piecewise-linear interpolant through the Euler iterates. Proved
+by combining the grid-point bound `ODE.euler_bound_solution_rational` with the
+intra-cell bound `ODE.euler_bound_cell`, and using that the right-hand side is
+monotone in the step index so the value at `N` dominates every cell. -/
 theorem euler_bound_solution_all {y : ℝ → ℝ} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
       (hKne : K > (0 : ℝ))
       (hx : SolutionExists f (x0 : ℝ) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
@@ -922,7 +1028,18 @@ open scoped Interval
 
 open Set Filter Topology Interval
 
+/-! ## Euler bounds for systems
+
+The scalar development repeated for `ℝ^k`-valued solutions, with `|·|` replaced by the
+Euclidean norm `‖·‖`. These are the versions used by `DynaLean.DigitalTwin`. -/
+
 variable {k : ℕ} (f : ℝ → (ℝ^k) → ℝ^k) (x0 : ℚ^k) (t₀ T : ℚ)
+
+/-- One step of the Euler error recurrence, for systems.
+
+`‖y tₙ₊₁ - xₙ₊₁‖ ≤ ‖y tₙ - xₙ‖ · (1 + K δ) + (ε + M δ / 2) · δ`.
+
+The `ℝ^k` analogue of `ODE.euler_bound_solution_iterate`. -/
 theorem euler_bound_solution_iterate_vector {ε : ℚ} (y : ℝ → ℝ^k) (K : NNReal) (M : ℚ)
       (hT : t₀ < T)
       (hx : SolutionExistsVector f (x0 : ℝ^k) y (t₀ : ℝ) (T : ℝ)
@@ -1143,6 +1260,13 @@ theorem euler_bound_solution_iterate_vector {ε : ℚ} (y : ℝ → ℝ^k) (K : 
               := by ring
       exact hmain n hn
 
+/-- The sharp, exactly rational grid-point error bound, for systems:
+
+`‖y tₙ - xₙ‖ ≤ (ε + M δ / 2) · δ · ((1 + K δ)ⁿ - 1) / (K δ)`.
+
+The `ℝ^k` analogue of `ODE.euler_bound_solution_rational`, again proved by discrete
+Grönwall. The right-hand side is exactly `ODE.EB K ε M δ n` as used by the digital-twin
+machinery. -/
 theorem euler_bound_solution_rational_vector {y} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
       (hKne : K > (0 : ℝ))
       (hx : SolutionExistsVector f (x0 : ℝ^k) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
@@ -1213,7 +1337,11 @@ theorem euler_bound_solution_rational_vector {y} {ε K : ℚ} (M : ℚ) (hMne : 
 
 
 
-/-- Construct an Euler scheme whose final grid point is `T`. -/
+/-- Construct a vector Euler scheme whose final grid point is `T`.
+
+The `ℚ^k` analogue of `ODE.LastSchema`: `N` equal steps of size `(T - t₀) / N`, so that
+`t N = T` exactly. This is the scheme `DynaLean.DigitalTwin` runs on each segment of a
+measurement `Schedule`. -/
 def LastVectorSchema (t₀ T : ℚ) (x0 : ℚ^k) (m : ℚ → (ℚ^k) → ℚ^k)
   (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T) :
   VectorScheme k where
@@ -1224,7 +1352,11 @@ def LastVectorSchema (t₀ T : ℚ) (x0 : ℚ^k) (m : ℚ → (ℚ^k) → ℚ^k)
   m := m
 
 
-/-- Specialize the Euler error bound to a scheme ending exactly at `T`. -/
+/-- Specialize the vector Euler error bound to a scheme ending exactly at `T`.
+
+For `S = ODE.LastVectorSchema t₀ T x₀ m N`,
+`‖y T - S.pl T‖ ≤ (ε + M δ / 2) · δ · ((1 + K δ)ᴺ - 1) / (K δ)`. This is
+`ODE.euler_bound_solution_rational_vector` at `n = N`, using `S.t N = T`. -/
 theorem euler_bound_solution_last_vector {ε : ℚ} (K : ℚ) (M : ℚ) (hMne : M > 0) (hKne : K > (0 : ℝ))
       (hx : SolutionExistsVector f (x0 : ℝ^k) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
               (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
@@ -1274,6 +1406,11 @@ theorem euler_bound_solution_last_vector {ε : ℚ} (K : ℚ) (M : ℚ) (hMne : 
           have ht₀ : S.t₀ = t₀ := by simp only [hS]; rfl
           rwa [htn]
 
+/-- Extend a grid-point error bound to every time inside a cell, for systems.
+
+The `ℝ^k` analogue of `ODE.euler_bound_cell`: for `s ∈ [tᵢ, tᵢ + δ]` the distance from
+`y s` to the affine piece `xᵢ + (s - tᵢ) • m tᵢ xᵢ` is at most
+`‖y tᵢ - xᵢ‖ · (1 + K δ) + (ε + M δ / 2) · δ`. -/
 theorem euler_bound_cell_vector {ε : ℚ} (y : ℝ → ℝ^k) (K : NNReal) (M : ℚ) (hM0 : 0 ≤ M)
       (hT : t₀ < T)
       (hx : SolutionExistsVector f (x0 : ℝ^k) y (t₀ : ℝ) (T : ℝ) (Set.Icc (t₀ : ℝ) (T : ℝ)))
@@ -1418,6 +1555,14 @@ theorem euler_bound_cell_vector {ε : ℚ} (y : ℝ → ℝ^k) (K : NNReal) (M :
   have hC2 := hC.trans (mul_le_mul_of_nonneg_right hθδ hKBε)
   exact le_trans (add_le_add (add_le_add hA le_rfl) hC2) (le_of_eq (by ring))
 
+/-- The global bound at every time of `[t₀, T]`, for systems.
+
+For `S = ODE.LastVectorSchema t₀ T x₀ m N` and every `s ∈ [t₀, T]`,
+
+`‖y s - S.plR s‖ ≤ (ε + M δ / 2) · δ · ((1 + K δ)ᴺ - 1) / (K δ)`.
+
+The `ℝ^k` analogue of `ODE.euler_bound_solution_all`, and the result that
+`DynaLean.DigitalTwin` discharges when it builds a `ODE.SegmentCert` for a segment. -/
 theorem euler_bound_solution_all_vector {ε : ℚ} (K : ℚ) (M : ℚ) (hMne : M > 0)
       (hKne : K > (0 : ℝ))
       (hx : SolutionExistsVector f (x0 : ℝ^k) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)

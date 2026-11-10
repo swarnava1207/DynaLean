@@ -8,6 +8,31 @@ public import DynaLean.Comparison
 open Set Filter
 open Metric
 
+/-! # Existence (and uniqueness) of solutions on a whole interval
+
+Mathlib's Picard-Lindelöf theorem produces a solution only on a short interval whose
+length is dictated by the data. This module upgrades that to existence on an arbitrary
+interval `[t₀, T]`, by the standard continuation argument:
+
+1. `ODE.SolutionExists.shrink` restricts a solution to a shorter interval;
+2. `ODE.solutionExists_glue` concatenates a solution on `[a, b]` with one on `[b, c]`
+   that starts where the first ended — the delicate point is the shared node `b`, where
+   two one-sided derivatives are combined with `HasDerivWithinAt.union`;
+3. `ODE.exists_solution_of_step` iterates the gluing `n` times;
+4. `ODE.existence_by_induction` instantiates the local step with Picard-Lindelöf on
+   subintervals of length `1 / (2K)` and takes `⌈(T - t₀) · 2K⌉` of them.
+
+Variants: `ODE.existence_by_induction_lipschitzOn` only assumes the Lipschitz bound on
+a bounded time interval, and `ODE.exists_solution_of_lipschitzOn_box` only assumes
+continuity and a Lipschitz bound on a compact box `Icc t₀ T ×ˢ closedBall c r`, using
+the constant extension `ODE.extend` from `DynaLean.Defs` to globalize them.
+
+Uniqueness (`ODE.uniqueness_of_solution_of_lipschitzOn_box`) follows from the
+comparison theorem of `DynaLean.Comparison` applied in both directions.
+
+The section `Vectors` at the end mirrors the whole development for `ℝ^n`-valued
+solutions; the statements and proofs are the scalar ones with `|·|` replaced by `‖·‖`.
+-/
 
 namespace ODE
 
@@ -99,7 +124,12 @@ theorem exists_solution_of_step {f : ℝ → ℝ → ℝ} {τ : ℝ} (hτ : 0 �
 
 
 /-- Prove existence on `[t₀, T]` by repeatedly applying Picard-Lindelöf on
-subintervals of length `1 / (2K)` and gluing the resulting solutions. -/
+subintervals of length `1 / (2K)` and gluing the resulting solutions.
+
+`f` is assumed jointly continuous and globally `K`-Lipschitz in its state argument.
+The step length `1 / (2K)` is chosen so that the Picard-Lindelöf hypotheses hold with
+radius `2M / K` and bound `3M`, where `M` bounds `f` along the frozen state; `⌈(T - t₀)
+· 2K⌉` steps then cover `[t₀, T]`, and the result is shrunk back to `[t₀, T]`. -/
 theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
       (hKne : K ≠ 0) (t₀ : ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
@@ -207,7 +237,11 @@ theorem existence_by_induction (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
         grind
       exact hxe.shrink (b' := T) (by linarith)
 
-/-- Existence of a solution on `[t₀, T]` if `f` is Lipschitz in the second argument on `[t₀, T]`. -/
+/-- Existence of a solution on `[t₀, T]` if `f` is Lipschitz in the second argument on `[t₀, T]`.
+
+Weakens `ODE.existence_by_induction`: the Lipschitz hypothesis is only needed on the
+time window `[t₀, t₀ + ⌈(T - t₀)·2K⌉ / (2K)]` actually swept by the induction, rather
+than for every `t : ℝ`. -/
 theorem existence_by_induction_lipschitzOn {K : NNReal} (f : ℝ → ℝ → ℝ) (x0 : ℝ) (T : ℝ)
       (hKne : K ≠ 0) (t₀ : ℝ) (ht : t₀ < T)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2))
@@ -504,6 +538,14 @@ theorem uniqueness_of_solution_of_lipschitzOn_box {K x y} {f : ℝ → ℝ → �
     grind
 
 section extend
+
+/-! ## Globalizing hypotheses that only hold on a compact box
+
+`ODE.extend f t₀ T c r` (defined in `DynaLean.Defs`) clamps both arguments into
+`Icc t₀ T ×ˢ closedBall c r`. The three lemmas below say that this costs nothing: the
+extension agrees with `f` on the box, inherits continuity globally, and inherits the
+Lipschitz constant globally. -/
+
 variable {f : ℝ → ℝ → ℝ} {t₀ T c r : ℝ} {K : NNReal}
 
 /-- On the box, the extension *is* `f`. -/
@@ -569,6 +611,16 @@ theorem exists_solution_of_lipschitzOn_box
 end extend
 section Vectors
 
+/-! ## The same development for `ℝ^n`-valued solutions
+
+Each theorem below is the exact analogue of its scalar counterpart earlier in this
+file, with `SolutionExists` replaced by `SolutionExistsVector` and `|·|` by `‖·‖`.
+The proofs are likewise the scalar ones transcribed; no new idea is involved, since
+Picard-Lindelöf in Mathlib already holds in an arbitrary Banach space. -/
+
+/-- Restrict a vector-valued solution to a shorter interval with the same initial time.
+
+The `ℝ^n` analogue of `ODE.SolutionExists.shrink`. -/
 theorem SolutionExistsVector.shrink
   (h : SolutionExistsVector f x₀ x t₀ T (Set.Icc t₀ T)) (hb' : b ≤ T) :
   SolutionExistsVector f x₀ x t₀ b (Set.Icc t₀ b) :=
@@ -576,6 +628,12 @@ theorem SolutionExistsVector.shrink
 
 
 
+/-- Glue a vector-valued solution on `[a,b]` with one on `[b,c]` that starts where the
+first ends.
+
+The `ℝ^n` analogue of `ODE.solutionExists_glue`: the concatenation is differentiable at
+the shared node `b` because the two one-sided derivatives there agree, so
+`HasDerivWithinAt.union` applies. -/
 theorem solutionExists_glue_vector {n : ℕ} {f : ℝ → (ℝ^n) → ℝ^n} {a b c : ℝ} {x₀ : ℝ^n}
     {x₁ x₂ : ℝ → (ℝ^n)}
     (hab : a ≤ b) (hbc : b ≤ c)
@@ -632,6 +690,10 @@ theorem solutionExists_glue_vector {n : ℕ} {f : ℝ → (ℝ^n) → ℝ^n} {a 
       rintro u ⟨hu1, hu2⟩
       exact ⟨le_of_lt hu2, hu1.2⟩
 
+/-- Iterate the vector-valued glue: `m` steps of size `τ` from any start time and any
+initial value.
+
+The `ℝ^n` analogue of `ODE.exists_solution_of_step`. -/
 theorem exists_solution_of_step_vector {n : ℕ} {f : ℝ → (ℝ^n) → ℝ^n} {τ : ℝ} (hτ : 0 ≤ τ)
     (hloc : ∀ (a : ℝ) (y : ℝ^n), ∃ x, SolutionExistsVector f y x a (a + τ) (Set.Icc a (a + τ))) :
     ∀ (m : ℕ) (a : ℝ) (y : ℝ^n),
@@ -658,6 +720,10 @@ theorem exists_solution_of_step_vector {n : ℕ} {f : ℝ → (ℝ^n) → ℝ^n}
       exact solutionExists_glue_vector hab hbc h₁ h₂
 
 
+/-- Existence of an `ℝ^n`-valued solution on `[t₀, T]` for a globally Lipschitz field.
+
+The `ℝ^n` analogue of `ODE.existence_by_induction`: Picard-Lindelöf is applied on
+subintervals of length `1 / (2K)` and the pieces are glued. -/
 theorem existence_by_induction_vector {K : NNReal} {n : ℕ}
     (f : ℝ → (ℝ^n) → ℝ^n) (x₀ : ℝ^n) (t₀ T : ℝ) (hKne : K ≠ 0)
     (hfc : Continuous (fun p : ℝ × ℝ^n => f p.1 p.2))
@@ -762,6 +828,10 @@ theorem existence_by_induction_vector {K : NNReal} {n : ℕ}
     exact hxe.shrink (b := T) (by linarith)
 
 
+/-- Existence of an `ℝ^n`-valued solution on `[t₀, T]` when the Lipschitz bound is only
+assumed on a bounded time window.
+
+The `ℝ^n` analogue of `ODE.existence_by_induction_lipschitzOn`. -/
 theorem existence_by_induction_lipschitzOn_vector {n : ℕ} {K : NNReal} (f : ℝ → (ℝ^n) → ℝ^n)
       (x0 : ℝ^n) (T : ℝ)
       (hKne : K ≠ 0) (t₀ : ℝ) (ht : t₀ < T)

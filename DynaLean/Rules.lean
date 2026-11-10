@@ -5,9 +5,34 @@ public import DynaLean.Defs
 public import DynaLean.Comparison
 
 @[expose] public section
-/-!-/
+
+/-! # Qualitative invariants ("rules") satisfied by a solution
+
+Side information that a solution is known to satisfy *for structural reasons*, and that
+can therefore be used to tighten a numerical enclosure without doing any extra
+numerics. Each rule here is a region or a monotonicity property that the exact solution
+can never leave:
+
+* `ODE.solution_half_line` — if the field is nonnegative on the level `c` and the
+  solution starts above `c`, it stays above `c` (an invariant half-line);
+* `ODE.solution_monotone` — if the field is nonnegative along the solution, the
+  solution is monotone;
+* `ODE.solution_lyapunov_kind` — if the field points inward at `±R` (nonpositive above
+  `R`, nonnegative below `-R`), the band `[-R, R]` is forward invariant.
+
+`DynaLean.RulesBound` intersects each of these with the Euler error bound of
+`DynaLean.EulerBound` to obtain enclosures that are strictly tighter than either source
+alone.
+-/
+
 namespace ODE
 
+/-- A lower barrier: the solution never falls below a level the field pushes it away
+from.
+
+If `y t₀ ≥ c`, the field is `K`-Lipschitz in state on `[t₀, T]`, and `f t c ≥ 0` there,
+then `y t ≥ c` throughout `[t₀, T]`. Proved by comparing `y` against the constant
+solution `c` of the zero field with `ODE.comparison_first_order`. -/
 theorem solution_half_line
   (hy : SolutionExists f x₀ y t₀ T (Set.Icc t₀ T))
   (hc : y t₀ ≥ c) (hfc : ∀ t ∈ Set.Icc t₀ T, f t c ≥ 0)
@@ -28,6 +53,11 @@ theorem solution_half_line
   have hcomp := comparison_first_order K hl z y ht (by rw [hy.1] at hc; grind) hg hz hy
   grind
 
+/-- A solution whose field is nonnegative along it is monotone increasing.
+
+Immediate from `monotoneOn_of_hasDerivWithinAt_nonneg`, since the derivative of `y` at
+`t` *is* `f t (y t)`. The companion `DynaLean.RulesBound.monotone_bound` uses this to
+propagate the best lower bound found so far to every later grid point. -/
 theorem solution_monotone
   (hy : SolutionExists f x₀ y t₀ T (Set.Icc t₀ T))
   (hf : ∀ t ∈ Set.Icc t₀ T, f t (y t) ≥ 0)
@@ -45,6 +75,16 @@ theorem solution_monotone
     simp only [hf']
     exact hf t (interior_subset ht)
 
+/-- Forward invariance of the band `[-R, R]` for an inward-pointing field.
+
+If `f t x ≤ 0` for `x ≥ R` and `f t x ≥ 0` for `x ≤ -R` on `[t₀, T]`, and the solution
+starts in `[-R, R]`, it never leaves.
+
+The name refers to the Lyapunov-style argument: suppose the solution escapes, say
+upwards. The last time `tf` at which it equals `R` exists (the escape set is closed and
+bounded), beyond `tf` the solution is strictly above `R`, and the mean value theorem
+produces a point in `(tf, t₁)` where the derivative is positive — contradicting
+`f t x ≤ 0` for `x ≥ R`. The downward case is symmetric. -/
 theorem solution_lyapunov_kind
   (hy : SolutionExists f x₀ y t₀ T (Set.Icc t₀ T))
   (hf : ∀ t ∈ Set.Icc t₀ T, (∀ x ≥ R, f t x ≤ 0) ∧ (∀ x ≤ -R, f t x ≥ 0))

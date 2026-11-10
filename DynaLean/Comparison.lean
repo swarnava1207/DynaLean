@@ -6,10 +6,31 @@ public import DynaLean.Defs
 @[expose] public section
 open Topology
 
+/-! # First-order comparison of ODE solutions
+
+The single result of this module, `ODE.comparison_first_order`, is the standard
+differential comparison (or "Chaplygin") theorem: a solution of the smaller field, from
+the smaller initial value, stays below a solution of the larger field.
+
+The proof is by contradiction. If the difference `z = x - y` ever becomes positive, the
+intermediate value theorem produces a last time `t_last` at which `z` vanishes; on the
+interval to the right of it `z ≥ 0`, so the Lipschitz hypothesis turns the differential
+inequality into `z' ≤ K z`, and Grönwall's inequality (`gronwallBound` with initial
+value `0`) forces `z ≤ 0` there — a contradiction.
+
+This result is reused for uniqueness (`ODE.uniqueness_of_solution_of_lipschitzOn_box`,
+by comparing a solution with itself in both directions) and for the qualitative
+invariants of `DynaLean.Rules`.
+-/
+
 namespace ODE
 
 /-- Compare two ODE solutions when the first vector field is pointwise smaller
-and the second is Lipschitz in the state variable. -/
+and the second is Lipschitz in the state variable.
+
+Given `x₀ ≤ y₀`, `f t (x t) ≤ g t (x t)` on `[t₀, T]`, and `g` Lipschitz with constant
+`K` in its state argument, any solution `x` of `f` from `x₀` stays below any solution
+`y` of `g` from `y₀` on all of `[t₀, T]`. -/
 theorem comparison_first_order {g : ℝ → ℝ → ℝ} (K : NNReal)
       (hl : ∀ t ∈ Set.Icc t₀ T, LipschitzWith K (fun x => g t x)) (x : ℝ → ℝ) (y : ℝ → ℝ)
       (ht : t₀ ≤ T) (hx0 : x0 ≤ y0)

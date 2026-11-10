@@ -6,27 +6,79 @@ public import DynaLean.EulerScheme
 public import DynaLean.EulerBound
 
 @[expose] public section
-/-!-/
+
+/-! # Refining a numerical estimate with prior one-sided bounds
+
+Where `DynaLean.RulesBound` specializes to three particular invariants, this module
+handles the generic situation: the user already knows an upper bound `b` and/or a lower
+bound `a` for the solution over the whole of `[t₀, T]`, each of which may be absent.
+Absence is modelled by `Option ℚ`, with `none` meaning "no information", so a single
+code path covers all four combinations.
+
+`ODE.refinement` intersects the Euler interval `xₙ ± bound n` with `[a, b]` and returns
+the *midpoint* of the result, i.e. a single best estimate rather than an interval. It
+returns `none` exactly when the prior bounds are contradictory (`a > b`).
+
+`ODE.refinement_satisfy` is the soundness theorem: the returned estimate respects both
+prior bounds and is within the Euler error radius of the exact solution. Narrowing the
+interval can only move the midpoint closer, which is why the *same* radius still works.
+`ODE.convex_rule_exists_refinement` repackages that as a plain existence statement.
+
+The final group (`ODE.refinement_monotone`, `ODE.refinement_monotone_satisfy`) is the
+monotone variant, where the estimate at step `n + 1` is the running maximum of the
+Euler iterates — legitimate when the exact solution is known to be increasing along the
+grid.
+-/
+
 namespace ODE
+
+/-- `Rule S x t₀ T` says the trajectory `x` stays inside the region `S` on `[t₀, T]`.
+
+The generic shape of a qualitative invariant; the concrete instances live in
+`DynaLean.Rules`. -/
 def Rule (S : Set ℝ) (x : ℝ → ℝ) (t₀ T : ℝ) := ∀ t ∈ Set.Icc t₀ T, x t ∈ S
 
+/-- An optional rational bound: `none` means "no bound known", `some q` means the
+bound `q`.
+
+Using `Option` rather than `ℚ` is what lets `ODE.refinement` treat one-sided and
+two-sided prior knowledge uniformly. -/
 abbrev bound := Option ℚ
 
+/-- `BdAbv y b` holds when `y` respects the optional upper bound `b`; vacuously true
+for `none`. -/
 def BdAbv (y : ℝ) (b : bound) : Prop :=
   match b with
   | none => True
   | some b => y ≤ b
 
+/-- `BdBlw y b` holds when `y` respects the optional lower bound `b`; vacuously true
+for `none`. -/
 def BdBlw (y : ℝ) (b : bound) : Prop :=
   match b with
   | none => True
   | some b => y ≥ b
 
+/-- `BdAbvF x t₀ T b`: the function `x` respects the optional upper bound `b` at every
+time of `[t₀, T]`. -/
 def BdAbvF (x : ℝ → ℝ) (t₀ T : ℝ) (b : bound) : Prop := ∀ t ∈ Set.Icc t₀ T, BdAbv (x t) b
 
+/-- `BdBlwF x t₀ T b`: the function `x` respects the optional lower bound `b` at every
+time of `[t₀, T]`. -/
 def BdBlwF (x : ℝ → ℝ) (t₀ T : ℝ) (b : bound) : Prop := ∀ t ∈ Set.Icc t₀ T, BdBlw (x t) b
 
 
+/-- Refine the `n`-th Euler iterate using optional prior bounds `a` (lower) and `b`
+(upper).
+
+Intersects the Euler interval `xₙ ± (ε + M δ/2) δ ((1 + K δ)ⁿ - 1)/(K δ)` with `[a, b]`
+and returns the midpoint of the intersection. Returns `none` precisely when both prior
+bounds are present and inconsistent (`a > b`), a case `ODE.refinement_satisfy` shows
+cannot arise for a genuine solution.
+
+The `hn : n ∈ Finset.range (⌊(T - t₀)/S.δ⌋₊ + 1)` argument is not used in the
+computation; it is there to keep the function from being applied outside the grid
+covering `[t₀, T]`, where the error bound would not hold. -/
 def refinement (S : Scheme) (ε M K t₀ T : ℚ) (a b : bound) (n : ℕ)
   : n ∈ Finset.range (⌊(T - t₀)/S.δ⌋₊ + 1) → Option ℚ :=
   fun _ =>
@@ -47,6 +99,19 @@ def refinement (S : Scheme) (ε M K t₀ T : ℚ) (a b : bound) (n : ℕ)
     some ((lwb + upb)/2)
 
 
+/-- Soundness of `ODE.refinement`.
+
+Under the hypotheses of `ODE.euler_bound_solution_rational`, and given that the exact
+solution `x` really does respect the prior bounds `a` and `b` on `[t₀, T]`, the call
+`refinement S ε M K t₀ T a b n hn`
+
+* is never `none` — contradictory priors are impossible for an actual solution; and
+* returns a rational `z` that respects both priors and satisfies
+  `|z - x (S.t n)| ≤ (ε + M δ/2) δ ((1 + K δ)ⁿ - 1)/(K δ)`.
+
+The error radius is unchanged from the unrefined Euler bound: clipping the interval
+and then taking its midpoint can only shrink the distance to the solution, since the
+solution lies in the clipped interval too. -/
 theorem refinement_satisfy {f : ℝ → ℝ → ℝ} {K ε M x₀ t₀ T : ℚ} {S : Scheme}
     (hx : SolutionExists f x₀ x t₀ T (Set.Icc (t₀ : ℝ) T)) (hMne : M > 0) (hK : K > (0 : ℝ))
     (hcont : ContDiffOn ℝ 2 x (Set.Icc (t₀ : ℝ) T)) (hT : t₀ < T)
@@ -182,6 +247,12 @@ theorem refinement_satisfy {f : ℝ → ℝ → ℝ} {K ε M x₀ t₀ T : ℚ} 
         | some a, some b => grind
 
 
+/-- Existence form of `ODE.refinement_satisfy`.
+
+Restates the soundness theorem without mentioning the `Option` returned by
+`ODE.refinement`: at every grid point there simply *exists* a rational estimate `z`
+respecting both prior bounds and within the Euler error radius of the solution.
+Convenient when the caller does not care how `z` was computed. -/
 theorem convex_rule_exists_refinement {K ε M x₀ t₀ T : ℚ} {S : Scheme}
     (hx : SolutionExists f x₀ x t₀ T (Set.Icc (t₀ : ℝ) T)) (hMne : M > 0) (hK : K > (0 : ℝ))
     (hcont : ContDiffOn ℝ 2 x (Set.Icc (t₀ : ℝ) T)) (hT : t₀ < T)
@@ -203,6 +274,11 @@ theorem convex_rule_exists_refinement {K ε M x₀ t₀ T : ℚ} {S : Scheme}
           exists z
 
 
+/-- The monotone estimate: the running maximum of the Euler iterates up to step `n`.
+
+Appropriate when the exact solution is known to be increasing along the grid; then
+replacing `xₙ` by `max x₀ ... xₙ` can only move the estimate towards the solution.
+Soundness is `ODE.refinement_monotone_satisfy`. -/
 def refinement_monotone (S : Scheme) (ε M K t₀ T : ℚ) (n : ℕ)
   (hn : n ∈ Finset.range (⌊(T - t₀) / S.δ⌋₊ + 1)) : ℚ :=
   match n with
@@ -211,6 +287,11 @@ def refinement_monotone (S : Scheme) (ε M K t₀ T : ℚ) (n : ℕ)
     max (S.x (n + 1)) (refinement_monotone S ε M K t₀ T n (by grind))
 
 
+/-- Taking a maximum does not degrade an error bound, provided the targets are ordered.
+
+If `a` approximates `y` to within `p`, `w` approximates `Y` to within `q`, and
+`y ≤ Y`, then `max a w` approximates `Y` to within `max p q`. This is the induction
+step behind `ODE.refinement_monotone_satisfy`. -/
 lemma ineq {a y p w Y q : ℝ} (h : |a - y| ≤ p) (g : |w - Y| ≤ q) (k : y ≤ Y)
   : |max a w - Y| ≤ max p q := by
   by_cases h' : max a w = a
@@ -218,6 +299,17 @@ lemma ineq {a y p w Y q : ℝ} (h : |a - y| ≤ p) (g : |w - Y| ≤ q) (k : y �
     grind
   · grind
 
+/-- Soundness of `ODE.refinement_monotone`.
+
+Assuming additionally that the exact solution is increasing along the grid
+(`hxn : x (S.t n) ≤ x (S.t (n+1))`), the running maximum
+
+* is itself monotone in `n`, and
+* stays within the usual Euler error radius
+  `(ε + M δ/2) δ ((1 + K δ)ⁿ - 1)/(K δ)` of the solution.
+
+The error radius survives because it is monotone in `n` (so `max` of two radii is the
+later one) and because of the elementary `ODE.ineq`. -/
 theorem refinement_monotone_satisfy {K ε M x₀ t₀ T : ℚ} {S : Scheme}
     (hx : SolutionExists f x₀ x t₀ T (Set.Icc (t₀ : ℝ) T)) (hMne : M > 0) (hK : K > (0 : ℝ))
     (hcont : ContDiffOn ℝ 2 x (Set.Icc (t₀ : ℝ) T)) (hT : t₀ < T)
@@ -289,6 +381,12 @@ theorem refinement_monotone_satisfy {K ε M x₀ t₀ T : ℚ} {S : Scheme}
         · specialize hxn m (by grind)
           grind
 
+/-! ## Worked example
+
+A throwaway scheme used only by the `#eval` below, to show the refinement machinery
+actually computing. -/
+
+/-- Example scheme: `δ = 1`, `t₀ = 0`, `x₀ = 1`, `m t y = y`, so `xₙ = 2ⁿ`. -/
 def egScheme : Scheme := {
   t₀ := 0
   x₀ := 1
@@ -297,6 +395,7 @@ def egScheme : Scheme := {
   hδ := by grind
 }
 
+-- Refine the third iterate of `egScheme` against the prior bounds `0 ≤ x ≤ 2`.
 #eval refinement egScheme 1 1 1 0 5 (some 0) (some 2) 3 (by simp only [sub_zero, egScheme, div_one,
   Nat.floor_ofNat, Nat.reduceAdd, Finset.mem_range, Nat.reduceLT])
 end ODE

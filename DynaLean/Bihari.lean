@@ -4,12 +4,37 @@ public import Mathlib
 public import DynaLean.Defs
 
 @[expose] public section
+
+/-! # A Bihari-type integral bound
+
+Bihari's inequality is the nonlinear generalization of Grönwall's: where Grönwall
+handles `x' ≤ g t * x`, Bihari handles `x' ≤ g t * w (x)` for a positive comparison
+function `w`.
+
+The device is the primitive `G u = ∫ t in u₀..u, 1 / w t`. Dividing the differential
+inequality by `w (x t)` and integrating turns it into `G (x t) - G (x 0) ≤ ∫ g`, and
+since `1 / w > 0` makes `G` strictly monotone, `G` can be inverted on `[0, ∞)` to give
+the explicit bound `x t ≤ G⁻¹ (G x₀ + ∫ g)`.
+
+The single theorem here, `ODE.nonneg_integral_bound`, states exactly that, and returns
+the inverse `G⁻¹` (realized as `Function.invFunOn`) together with the two equations
+witnessing that it really is a two-sided inverse of `G` on the relevant sets.
+-/
+
 variable {f : ℝ → ℝ → ℝ}
 
 namespace ODE
 
 /-- Bihari-type upper bound obtained by transforming the differential inequality
-with the integral of the reciprocal comparison function. -/
+with the integral of the reciprocal comparison function.
+
+Assume `x` is a nonnegative solution of `x' = f t x` on `[0, T]`, that
+`f t (x t) ≤ g t * w (x t)` with `w > 0` on `[0, ∞)`, and that
+`G u = ∫ t in u₀..u, 1 / w t` has `G x₀ + ∫ g` in its range. Then there is a function
+`G_inv` inverting `G` on `[0, ∞)` such that `x t ≤ G_inv (G x₀ + ∫ s in 0..t, g s)`
+throughout `[0, T]`.
+
+Taking `w = id` recovers the classical Grönwall bound. -/
 theorem nonneg_integral_bound {ε : NNReal} (hε : 0 < ε) (g : ℝ → ℝ)
       (hfc : Continuous (fun p : ℝ × ℝ => f p.1 p.2)) (hgc : Continuous g)
       (w : ℝ → ℝ) (hwc : Continuous w) (x : ℝ → ℝ) (u₀ : ℝ)

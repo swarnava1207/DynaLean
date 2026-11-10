@@ -1,11 +1,32 @@
 import Mathlib
 import DynaLean.Defs
 
+/-! # Regularity of solutions, and bounds on the second derivative
+
+The Euler error bounds in `DynaLean.EulerBound` take two hypotheses about the exact
+solution `y` as given: that it is `C²` on `[a, b]`, and that `‖y''‖ ≤ M` there. This
+module discharges both from a hypothesis about the *vector field* instead, which is
+what a user actually has in hand.
+
+The bootstrap is the usual one: `y' = f t (y t)` is continuous because `f` and `y` are,
+so `y` is `C¹`; but then `t ↦ f t (y t)` is itself `C¹`, so `y` is `C²`
+(`ODE.solution_regularOn`). Compactness of `[a, b]` then bounds the continuous second
+derivative (`ODE.bounded_iterated_deriv_two`).
+
+Section `Scalar` treats `ℝ`-valued solutions and section `Vector` the `ℝ^k`-valued
+ones; the two developments are identical up to `|·|` versus `‖·‖`.
+
+Note that this module is a plain (non-`module`) Lean file and is not re-exported by the
+root `DynaLean` module; import `DynaLean.Derivations` directly to use it.
+-/
 
 namespace ODE
 
 
 section Scalar
+
+/-! ## Scalar solutions -/
+
 variable {f : ℝ → ℝ → ℝ} {t₀ x₀ : ℝ}
 set_option linter.style.longLine false in
 /-- `y` is C^2 on the open interval `(a, b)` if it is the solution of `f` and `f` is C^1 on the closed interval `[a, b] × ℝ`. -/
@@ -90,8 +111,18 @@ end Scalar
 
 
 section Vector
+
+/-! ## Vector-valued solutions
+
+The same two results for `ℝ^k`-valued solutions, with the absolute value replaced by
+the Euclidean norm. The proofs are the scalar ones transcribed verbatim. -/
+
 variable {k : ℕ} {f : ℝ → (ℝ^k) → ℝ^k} {t₀ x₀ : ℝ^k}
 
+set_option linter.style.longLine false in
+/-- `y` is C^2 on `[a, b]` if it is an `ℝ^k`-valued solution of `f` and `f` is C^1 on `[a, b] × ℝ^k`.
+
+The `ℝ^k` analogue of `ODE.solution_regularOn`. -/
 theorem solution_regularOn_vector
     (hf : ContDiffOn ℝ 1 (fun t : ℝ × ℝ^k => f t.1 t.2) ((Set.Icc a b) ×ˢ Set.univ))
     (y : ℝ → ℝ^k) (hy : SolutionExistsVector f x₀ y a b (Set.Icc a b))
@@ -141,6 +172,11 @@ theorem solution_regularOn_vector
     exact hF1.congr hkey
 
 
+set_option linter.style.longLine false in
+/-- `‖y''‖` is bounded on `(a, b)` if `y` is an `ℝ^k`-valued solution of `f` and `f` is C^1 on `[a, b] × ℝ^k`.
+
+The `ℝ^k` analogue of `ODE.bounded_iterated_deriv_two`; this supplies the constant `M`
+required by the vector Euler bounds in `DynaLean.EulerBound`. -/
 theorem bounded_iterated_deriv_two_vector
     (hf : ContDiffOn ℝ 1 (fun t : ℝ × ℝ^k => f t.1 t.2) ((Set.Icc a b) ×ˢ Set.univ))
     (y : ℝ → ℝ^k) (hy : SolutionExistsVector f x₀ y a b (Set.Icc a b))

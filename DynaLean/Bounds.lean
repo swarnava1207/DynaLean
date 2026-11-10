@@ -6,11 +6,28 @@ public import DynaLean.Defs
 @[expose] public section
 open Topology
 
+/-! # A priori upper bounds for ODE solutions
+
+Two elementary ways to bound a scalar solution from above without solving the equation,
+both proved by showing that an explicit "solution minus primitive of the bound"
+difference is antitone:
+
+* `ODE.constant_bound_solution` — a uniform bound `|f| ≤ M` gives `x t ≤ x₀ + M (t - t₀)`;
+* `ODE.time_dependent_bound_solution` — a continuous time-dependent bound `|f| ≤ g t`
+  gives `x t ≤ x₀ + ∫ g`.
+
+Both conclusions are one-sided; applying them to `-x` (solution of `-f`) gives the
+corresponding lower bounds.
+-/
 
 variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {t₀ T : ℝ} {M : NNReal}
 
 namespace ODE
-/-- Bound a solution using a uniform absolute bound on the vector field. -/
+/-- Bound a solution using a uniform absolute bound on the vector field.
+
+If `|f t x| ≤ M` everywhere and `x` solves `x' = f t x` with `x t₀ = x₀` on `[t₀, T]`,
+then `x t ≤ x₀ + M * (t - t₀)` throughout `[t₀, T]`: the solution cannot climb faster
+than the steepest slope the field allows. -/
 theorem constant_bound_solution (x : ℝ → ℝ) (ht : t₀ ≤ T)
       (hx : SolutionExists f x0 x t₀ T (Set.Icc t₀ T))
       (hM : ∀ t x, |f t x| ≤ M) : ∀ t ∈ Set.Icc t₀ T, x t ≤ x0 + M * (t - t₀) := by
@@ -61,7 +78,11 @@ theorem constant_bound_solution (x : ℝ → ℝ) (ht : t₀ ≤ T)
 
 
 set_option linter.style.longLine false in
-/-- Bound a solution using a continuous time-dependent upper bound on the vector field. -/
+/-- Bound a solution using a continuous time-dependent upper bound on the vector field.
+
+The refinement of `ODE.constant_bound_solution` in which the uniform constant `M` is
+replaced by a continuous function of time: if `|f t x| ≤ g t` for all `x`, then
+`x t ≤ x₀ + ∫ s in t₀..t, g s` throughout `[t₀, T]`. -/
 theorem time_dependent_bound_solution {g : ℝ → ℝ} (x : ℝ → ℝ) (hgc : Continuous g)
       (hx : SolutionExists f x0 x t₀ T (Set.Icc t₀ T)) (ht : t₀ ≤ T)
       (hg : ∀ t x, |f t x| ≤ g t) : ∀ t ∈ Set.Icc t₀ T, x t ≤ x0 + ∫ s in t₀..t, g s:= by

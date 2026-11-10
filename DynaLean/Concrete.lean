@@ -1,20 +1,5 @@
 module
 
-/-
-Concrete bounds on the Euler iterates `S.x n`, tiers 1 and 2.
-
-  Tier 1  `#derive_bound foo S n`            ==>  theorem foo : S.x n = v
-  Tier 2  `#derive_bound foo S n digits k`   ==>  theorem foo : lo ≤ S.x n ∧ S.x n ≤ hi
-
-Both tiers compute `S.x n` *exactly*; tier 2 only rounds the answer outward to `k`
-decimal places for readability. Neither tier buys any computational headroom over
-exact evaluation.
-
-Architecture, deliberately split three ways:
-  1. `evalRatCbv`  -- compute phase, untrusted, only picks the numbers.
-  2. `mkBoundCmd`  -- pure syntax builder, no `MetaM`, no failure, `#eval`-testable.
-  3. `elabDeriveBound` -- generate, elaborate (so the proof is *checked*), then suggest.
--/
 public import Mathlib
 public import Lean
 public meta import DynaLean.EulerScheme
@@ -29,10 +14,37 @@ open Lean.Meta.Tactic.Cbv (cbvEntry)
 open Lean.Meta.Sym.Simp (Result)
 open Lean.Meta.Tactic.TryThis (addSuggestion)
 
-/-! ## Scheme prelude
+/-! # `#derive_bound`: concrete bounds on the Euler iterates `S.x n`
 
-Only the parts the bound machinery needs. Replace this section with an `public import` of
-your own `Scheme` file and delete the duplication. -/
+A command that evaluates a `Scheme`'s iterate `S.x n` and emits a *proved* theorem
+stating the result. Two tiers:
+
+```text
+#derive_bound foo S n            ==>  theorem foo : S.x n = v
+#derive_bound foo S n digits k   ==>  theorem foo : lo ≤ S.x n ∧ S.x n ≤ hi
+```
+
+Both tiers compute `S.x n` *exactly* — everything in a `Scheme` is rational. Tier 2
+only rounds the answer outward to `k` decimal places so the statement is readable; it
+buys no computational headroom over exact evaluation. (A hypothetical tier 3, doing a
+genuine interval iteration for schemes whose denominators blow up, would slot in by
+producing a `BoundShape.between` from the interval instead of from a rounded exact
+value, touching nothing else in this file.)
+
+## Architecture, deliberately split three ways
+
+1. **Compute phase** — `unsafe evalExpr'` on `Scheme.x`. Untrusted: it only picks the
+   numbers, and a wrong answer causes a failure to elaborate, not a wrong theorem.
+2. **Pure syntax builders** — `natLitT`, `ratLit`, `mkStmt`, `mkBoundCmd`, `roundTo`.
+   No `MetaM`, no failure modes, testable in isolation with `#eval`. This is the layer
+   that stays fixed when the compute phase changes.
+3. **The command** — `elabDeriveBound` generates the candidate theorem, *elaborates it*
+   (via `cmdSucceeds`, so the proof is actually checked before anything is offered),
+   then adds it as a `Try this` suggestion.
+
+Nothing here is part of the trusted story: the output is an ordinary theorem whose
+proof the kernel checks.
+-/
 
 
 /-! ## 1. What the compute phase produces
@@ -90,6 +102,14 @@ Collapses to `.eq` when `v` is exactly representable at that precision. -/
 
 /-! ## 3. The command -/
 
+/-- `#derive_bound name S n` states and proves `S.x n = v` for the exact rational `v`.
+
+`#derive_bound name S n digits k` instead states and proves `lo ≤ S.x n ∧ S.x n ≤ hi`,
+where `lo` and `hi` are `v` rounded outward to `k` decimal places.
+
+In both cases the theorem is elaborated (hence its proof checked) before being added to
+the environment, and the generated command is offered as a `Try this` suggestion so it
+can be pasted into the file. Implemented by `elabDeriveBound`. -/
 syntax (name := deriveBoundCmd)
   "#derive_bound " ident ppSpace term:max ppSpace num (" digits " num)? : command
 
@@ -115,6 +135,13 @@ against `OfNat`/instance layers that `cbv` declines to unfold. -/
     ← `(tactic| decide)
   ]
 
+/-- The elaborator behind the `#derive_bound` command.
+
+Runs the three phases in order: (a) evaluate `S.x n` to a `ℚ`, (b) turn the result into
+a `BoundShape` and build the candidate theorem for each tactic in `proofCandidates`,
+(c) keep the first candidate that really elaborates, add it to the environment, and
+offer it as a `Try this` suggestion. Throws if no candidate tactic proves the computed
+value. -/
 @[command_elab deriveBoundCmd]
 public meta def elabDeriveBound : CommandElab := fun stx => do
   match stx with
@@ -155,8 +182,8 @@ def egScheme : Scheme where
   x₀ := 1
   m := fun t x => x
 
-/-- `δ = 1/3`, `m t x = x` ⇒ `x n = (4/3) ^ n`. Denominator `3 ^ n`: singly
-exponential, so exact evaluation copes for a long time. -/
+/-- `δ = 1/3`, `m t x = x + t`, so `x (n+1) = (4/3) · x n + n / 9`. Denominators grow
+like `3 ^ n`: singly exponential, so exact evaluation copes for a long time. -/
 def qScheme : Scheme where
   δ := 1/3
   hδ := by norm_num

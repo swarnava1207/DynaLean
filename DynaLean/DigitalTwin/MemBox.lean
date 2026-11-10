@@ -7,12 +7,48 @@ public import DynaLean.DigitalTwin.Defs
 
 @[expose] public section
 
+/-! # Digital twins: soundness of the tube construction
+
+`DynaLean.DigitalTwin.Defs` defines the computation: `ODE.Rec` re-centres a ball on a
+measurement, `ODE.segEnd` pushes it across a segment, `ODE.nodeAt` alternates the two,
+and `ODE.BuildTube` runs the whole schedule. This module proves that the computation
+means what it should.
+
+The results, in dependency order:
+
+* **Rational square roots.** `ODE.le_sq_sqrtUB`, `ODE.sqrt_le_sqrtUB` and
+  `ODE.norm_le_qnormUB` establish that `ODE.sqrtUB` really over-approximates `√`, which
+  is what keeps the exactly-rational radius arithmetic sound.
+* **Re-centring.** `ODE.rec_sound` — if a state is in the old ball and in the measured
+  box, it is in the ball `Rec` returns. `ODE.rec_refute` — if `Rec` returns `none`, no
+  such state exists.
+* **Twin drift.** `ODE.bound_twin_shift` and `ODE.bound_twin` bound the separation of
+  two trajectories whose velocities differ by at most `ε`: it grows at most linearly,
+  `‖w t - z t‖ ≤ ‖w τ - z τ‖ + ε (t - τ)`.
+* **Segments.** `ODE.segment_estimate`, `ODE.segment_estimate_grid` and
+  `ODE.segment_estimate_at` combine twin drift with the Euler bound by the triangle
+  inequality: true trajectory → model solution → interpolant.
+* **The main theorems.** `ODE.node_invariant` (the twin is inside the computed ball at
+  every node), `ODE.tube_enclosure` and `ODE.tube_enclosure_global` (it is inside the
+  tube at *every* time), and `ODE.drift_sound` (if `BuildTube` returns `none`, no twin
+  consistent with the measurements exists at all).
+
+`ODE.drift_sound` is the practically interesting direction: a failed computation is a
+*proof* that the model has drifted out of its stated error budget, not merely a
+failure to establish containment.
+-/
+
 namespace ODE
 
 
 
 section MemBox
 
+/-- Every measurement time of a schedule lies in `[t₀, T]`.
+
+Immediate from strict monotonicity of `τ` together with `τ 0 = t₀` and
+`τ (last p) = T`; used constantly to transfer hypotheses stated on `[t₀, T]` to a
+single segment. -/
 theorem time_mem_schedule {k : ℕ} {t₀ T : ℚ} (sch : Schedule k t₀ T) (i : Fin (sch.p + 1)) :
   (sch.τ i : ℝ) ∈ Set.Icc (t₀ : ℝ) T := by
   apply Set.mem_Icc.mpr
@@ -28,6 +64,12 @@ theorem time_mem_schedule {k : ℕ} {t₀ T : ℚ} (sch : Schedule k t₀ T) (i 
 
 end MemBox
 
+/-! ## `sqrtUB` really is an upper bound for the square root -/
+
+/-- `ODE.sqrtUB` squares to at least `x`: `x ≤ (sqrtUB x) ^ 2` for `0 ≤ x`.
+
+Writing `x = p / q` with `p = x.num ≥ 0` and `q = x.den`, the claim reduces to
+`p · q < (⌊√(p·q)⌋ + 1) ^ 2`, which is `Nat.lt_succ_sqrt`. -/
 theorem le_sq_sqrtUB (x : ℚ) (hx : 0 ≤ x) : x ≤ (sqrtUB x) ^ 2 := by
   simp only [sqrtUB]
   have h : x = (x.num.toNat * x.den) / (x.den * x.den) := by
@@ -45,6 +87,11 @@ theorem le_sq_sqrtUB (x : ℚ) (hx : 0 ≤ x) : x ≤ (sqrtUB x) ^ 2 := by
   · norm_cast
     apply (Nat.lt_succ_sqrt (x.num.toNat * x.den)).le
 
+/-- `Real.sqrt x ≤ sqrtUB x` for `0 ≤ x`: the rational over-approximation dominates the
+real square root.
+
+The form in which `ODE.le_sq_sqrtUB` is actually used, since the quantities being
+bounded (norms, radii) live in `ℝ`. -/
 theorem sqrt_le_sqrtUB (x : ℚ) (hx : 0 ≤ x) : Real.sqrt x ≤ (sqrtUB x : ℝ) := by
   have h : (x : ℝ) ≤ (sqrtUB x : ℝ) ^ 2 := by
     norm_cast
@@ -57,6 +104,10 @@ theorem sqrt_le_sqrtUB (x : ℚ) (hx : 0 ≤ x) : Real.sqrt x ≤ (sqrtUB x : �
   rw [← h']
   apply Real.sqrt_le_sqrt h
 
+/-- `ODE.qnormUB` over-approximates the Euclidean norm: `‖x‖ ≤ qnormUB x`.
+
+`ODE.sqrt_le_sqrtUB` applied to the sum of squares, after identifying the `L²` norm on
+`ℝ^k` with `√(∑ xᵢ²)`. -/
 theorem norm_le_qnormUB {k : ℕ} (x : ℚ^k) : ‖(x : ℝ^k)‖ ≤ (qnormUB x : ℝ) := by
   simp only [qnormUB]
   simp only [WithLp.equiv_symm_apply]
@@ -74,6 +125,12 @@ theorem norm_le_qnormUB {k : ℕ} (x : ℚ^k) : ‖(x : ℝ^k)‖ ≤ (qnormUB x
     intro i hi
     simp only [sq_nonneg]
 
+/-- Summing `g` over the indices of a list via `Fin`-indexed `getElem!` is the same as
+summing `List.map g` over the list.
+
+A plumbing lemma: `ODE.ObtainLU` returns a `List`, `ODE.Rec` sums over it with
+`List.map`, but the enclosure proofs index coordinates by `Fin k`. This reconciles the
+two views. -/
 lemma sum_fin_bang_eq_map_sum {α M : Type*} [AddCommMonoid M] [Inhabited α]
     {k : ℕ} (L : List α) (hk : L.length = k) (g : α → M) :
     (∑ i : Fin k, g L[i.val]!) = (L.map g).sum := by
@@ -91,6 +148,14 @@ lemma sum_fin_bang_eq_map_sum {α M : Type*} [AddCommMonoid M] [Inhabited α]
     simp_rw [h_zero, h_succ]
     rw [ih]
 
+/-! ## Soundness of the re-centring step -/
+
+/-- Re-centring preserves enclosure: if `Rec c r A B = some (c', r')`, then any state
+in `closedBall c r` that also satisfies the box constraints lies in `closedBall c' r'`.
+
+The two branches of `Rec` are checked separately: when the box is kept, `r'` is its
+circumradius and the bound comes from `ODE.sqrtUB` over-approximating the diagonal;
+when the prior ball is kept, the claim is the hypothesis itself. -/
 theorem rec_sound {k : ℕ} {c c' : ℚ^k} {r r' : ℚ} {A B : Fin k → (Option ℚ)}
   (hrec : Rec c r A B = some (c', r')) (v : ℝ^k) (hv : MemBox v A B)
   (hr : ‖v - c‖ ≤ r) : ‖v - c'‖ ≤ r' := by
@@ -236,6 +301,12 @@ theorem rec_sound {k : ℕ} {c c' : ℚ^k} {r r' : ℚ} {A B : Fin k → (Option
     exact hr
 
 
+/-- Failure of re-centring is a refutation: if `Rec c r A B = none`, no state at all
+lies in `closedBall c r` and satisfies the box constraints.
+
+`Rec` returns `none` only when some coordinate's clipped interval is empty, and a state
+meeting both constraints would have to lie in it. This is the local step behind
+`ODE.drift_sound`. -/
 theorem rec_refute {k : ℕ} {c : ℚ^k} {r : ℚ} {A B : Fin k → (Option ℚ)}
   (hrec : Rec c r A B = none) (v : ℝ^k) (hv : MemBox v A B)
   (hr : ‖v - c‖ ≤ r) : False := by
@@ -327,6 +398,16 @@ theorem rec_refute {k : ℕ} {c : ℚ^k} {r : ℚ} {A B : Fin k → (Option ℚ)
     norm_cast at triv
     grind
 
+/-! ## How fast two trajectories can separate -/
+
+/-- Two trajectories whose velocities differ by at most `ε` separate at most linearly:
+`‖w t - z t‖ ≤ ‖w τ - z τ‖ + ε (t - τ)` on `[τ, σ]`.
+
+No Lipschitz hypothesis is needed, and no relation between `f` and `g` away from the
+two trajectories: the difference `w - z` has derivative `f s (w s) - g s (z s)`, which
+is bounded by `ε` by assumption, so the segment mean-value inequality applies directly.
+
+This is what charges `εz · (t - τ)` of drift to the tube radius in `ODE.segRadius`. -/
 theorem bound_twin_shift {k : ℕ} (w z : ℝ → ℝ^k) (f g : ℝ → (ℝ^k) → ℝ^k)
     (τ σ : ℝ) (ε : ℝ)
     (hw : ∀ s ∈ Set.Icc τ σ, HasDerivWithinAt w (f s (w s)) (Set.Icc τ σ) s)
@@ -354,6 +435,8 @@ theorem bound_twin_shift {k : ℕ} (w z : ℝ → ℝ^k) (f g : ℝ → (ℝ^k) 
   have hfg := hfg s (by grind)
   exact hfg
 
+/-- `ODE.bound_twin_shift` for two trajectories sharing an initial value: then the
+separation is purely drift, `‖w t - z t‖ ≤ ε (t - t₀)`. -/
 theorem bound_twin {k : ℕ} (w z : ℝ → ℝ^k) (f g : ℝ → (ℝ^k) → ℝ^k)
     (t₀ T : ℚ) (ε : ℝ) (z₀ : ℝ^k)
     (hz : SolutionExistsVector g z₀ z (t₀ : ℝ) T (Set.Icc (t₀ : ℝ) T))
@@ -366,10 +449,14 @@ theorem bound_twin {k : ℕ} (w z : ℝ → ℝ^k) (f g : ℝ → (ℝ^k) → �
   simp only [sub_self, norm_zero, zero_add] at hfg
   exact hfg
 
+/-- Zero Euler steps cost nothing: `EB K ε M δ 0 = 0`. -/
 lemma EB_zero {K ε M δ : ℚ} : EB K ε M δ 0 = 0 := by
   simp only [EB]
   ring
 
+/-- The Euler budget is monotone in the number of steps: more steps never shrink it.
+
+Lets a bound established at one step index be reused at any later one. -/
 lemma EB_mono {K ε M δ : ℚ} (hK : 0 < K) (hε : 0 ≤ ε) (hM : 0 ≤ M) (hδ : 0 < δ) :
   Monotone (EB K ε M δ) := by
   intro s t hst
@@ -378,6 +465,21 @@ lemma EB_mono {K ε M δ : ℚ} (hK : 0 < K) (hε : 0 ≤ ε) (hM : 0 ≤ M) (h�
   simp only [le_add_iff_nonneg_right]
   positivity
 
+/-! ## Segment estimates
+
+The three statements below are the same triangle inequality at three levels of
+packaging. Write `z` for the true trajectory, `yc` for the exact solution of the model
+field started at the node centre, and `C` for the computed curve (the Euler
+interpolant). Then
+
+`‖z - C‖ ≤ ‖z - yc‖ + ‖yc - C‖ ≤ (ρ + εz (t - τ)) + EB`,
+
+where the first summand is bounded by `ODE.bound_twin_shift` and the second is the
+Euler bound supplied by the caller. -/
+
+/-- Enclosure on one segment, in its most general form: `C` is an arbitrary curve
+tracking the model solution `yc` to within `EB t`, and the conclusion is
+`‖z t - C t‖ ≤ ρ + εz (t - τ) + EB t`. -/
 theorem segment_estimate {k : ℕ}
     {f g : ℝ → (ℝ^k) → ℝ^k} {z yc : ℝ → ℝ^k} (C : ℝ → ℝ^k)
     {ρ εz : ℝ} {EB : ℝ → ℝ} {τ σ : ℝ}
@@ -398,6 +500,11 @@ theorem segment_estimate {k : ℕ}
     rwa [norm_sub_rev]
   linarith [hEB t ht]
 
+/-- `ODE.segment_estimate` specialized to the grid points of a concrete segment scheme.
+
+Here `C` is the interpolant of `ODE.LastVectorSchema τ σ c m N` and the budget is the
+rational `ODE.EB`, so the conclusion is a statement about computable quantities:
+`‖z (τ + n δ) - S.pl (τ + n δ)‖ ≤ ρ + εz (n δ) + EB K M εm δ n` for every `n ≤ N`. -/
 theorem segment_estimate_grid {k : ℕ}
     (f g : ℝ → (ℝ^k) → ℝ^k) (m : ℚ → (ℚ^k) → ℚ^k) (z yc : ℝ → ℝ^k)
     (τ σ : ℚ) (hτσ : τ < σ) (c : ℚ^k) (ρ εz εm K M : ℚ)
@@ -434,10 +541,16 @@ theorem segment_estimate_grid {k : ℕ}
   rw [norm_sub_rev, hyc.1.symm] at hρ
   grind
 
+/-! ## Unfolding lemmas for `nodeAt` -/
+
+/-- The first node is the prior ball re-centred on the first measurement. -/
 @[simp] theorem nodeAt_zero {sch : Schedule k t₀ T} {εz εm : ℚ} :
     nodeAt sch m x₀ ρ₀ εz εm K M 0 = Rec x₀ ρ₀ (sch.A 0) (sch.B 0) :=
   Fin.induction_zero _ _
 
+/-- Each later node is the previous one pushed across a segment (`ODE.segEnd`) and then
+re-centred on the next measurement (`ODE.Rec`), with `Option.bind` short-circuiting a
+run that has already been refuted. -/
 @[simp] theorem nodeAt_succ {sch : Schedule k t₀ T} {εz εm : ℚ} (i : Fin sch.p) :
     nodeAt sch m x₀ ρ₀ εz εm K M i.succ
       = (nodeAt sch m x₀ ρ₀ εz εm K M i.castSucc).bind (fun p =>
@@ -445,6 +558,8 @@ theorem segment_estimate_grid {k : ℕ}
           Rec cE rE (sch.A i.succ) (sch.B i.succ)) :=
   Fin.induction_succ _ _ _
 
+/-- A successful node implies its predecessor succeeded: failure is absorbing, so
+`nodeAt` can only be `some` at `i.succ` if it was `some` at `i.castSucc`. -/
 theorem nodeAt_isSome_castSucc {sch : Schedule k t₀ T} {εz εm : ℚ}
     {i : Fin sch.p}
     (h : (nodeAt sch m x₀ ρ₀ εz εm K M i.succ).isSome) :
@@ -454,6 +569,11 @@ theorem nodeAt_isSome_castSucc {sch : Schedule k t₀ T} {εz εm : ℚ}
   simp only [Bool.not_eq_true, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none] at hcast
   simp only [hcast, Option.bind_none, Option.isSome_none, Bool.false_eq_true] at h
 
+/-- `ODE.segment_estimate` at a single time, with the Euler bound supplied pointwise.
+
+The form the main theorems actually use: instead of a curve `C` and a budget function,
+it takes one point `Ct` and one number `EBt` with `‖yc t - Ct‖ ≤ EBt`, which is exactly
+what a `ODE.SegmentCert` hands over. -/
 theorem segment_estimate_at {k : ℕ}
     {f g : ℝ → (ℝ^k) → ℝ^k} {z yc : ℝ → ℝ^k} {τ σ : ℚ} {ρ εz : ℝ}
     (hyc : ∀ s ∈ Set.Icc (τ : ℝ) σ, HasDerivWithinAt yc (f s (yc s)) (Set.Icc (τ : ℝ) σ) s)
@@ -471,7 +591,18 @@ theorem segment_estimate_at {k : ℕ}
   rw [norm_sub_rev]
   grind
 
-/-- Node invariant: the twin is inside the recentred ball at every measurement node. -/
+/-! ## Main soundness theorems -/
+
+/-- Node invariant: the twin is inside the recentred ball at every measurement node.
+
+If the run succeeds at every node (`hrun`), every segment has a certificate (`hseg`),
+`z` is a digital twin of `f` consistent with the measurements, and the prior
+`‖z t₀ - x₀‖ ≤ ρ₀` holds, then `‖z (τ i) - (W i).1‖ ≤ (W i).2` for every node `i`.
+
+By induction along the schedule. The base case is `ODE.rec_sound` applied to the prior;
+the inductive step composes `ODE.segment_estimate_at` (carry the enclosure across the
+segment, paying drift plus Euler error) with `ODE.rec_sound` (tighten it with the next
+measurement). -/
 theorem node_invariant {k : ℕ} {t₀ T : ℚ}
     (sch : Schedule k t₀ T) {f g : ℝ → (ℝ^k) → ℝ^k} {m : ℚ → (ℚ^k) → ℚ^k}
     {Ω : Set (ℝ × ℝ^k)} {εz εm K M : ℚ} {x₀ : ℚ^k} {ρ₀ : ℚ}
@@ -551,6 +682,11 @@ theorem node_invariant {k : ℕ} {t₀ T : ℚ}
                    grind)
     exact hrec)
 
+/-- The twin stays in the tube throughout each segment, not just at its endpoints:
+`‖z t - segCentre … t‖ ≤ segRadius … t` for every `t` in segment `i`.
+
+`ODE.node_invariant` supplies the enclosure at the left endpoint of the segment, and
+`ODE.segment_estimate_at` carries it to an arbitrary interior time. -/
 theorem tube_enclosure {k : ℕ} {t₀ T : ℚ}
     (sch : Schedule k t₀ T) {f g : ℝ → (ℝ^k) → ℝ^k} {m : ℚ → (ℚ^k) → ℚ^k}
     {Ω : Set (ℝ × ℝ^k)} {εz εm K M : ℚ} {x₀ : ℚ^k} {ρ₀ : ℚ}
@@ -578,6 +714,19 @@ theorem tube_enclosure {k : ℕ} {t₀ T : ℚ}
     ht (hcert.hEB t ht)
 
 
+/-- Drift detection: a failed tube construction refutes the twin.
+
+If `ODE.BuildTube` returns `none` then there is *no* trajectory `z` that is a digital
+twin of `f` within `εz`, is consistent with the measurements, and starts within `ρ₀`
+of `x₀`.
+
+Contrapositive of `ODE.node_invariant`: such a `z` would force every node to succeed
+(each `Rec` has a state to enclose, so `ODE.rec_refute` forbids `none`), in particular
+the last one — contradicting `BuildTube = none`.
+
+This is the operationally useful direction. A failed run is positive evidence that the
+model has drifted outside its declared error budget, not merely an inconclusive
+computation. -/
 theorem drift_sound {k : ℕ} {t₀ T : ℚ}
     (sch : Schedule k t₀ T) {f g : ℝ → (ℝ^k) → ℝ^k} {m : ℚ → (ℚ^k) → ℚ^k}
     {Ω : Set (ℝ × ℝ^k)} {εz εm K M : ℚ} {x₀ : ℚ^k} {ρ₀ : ℚ}
@@ -660,6 +809,12 @@ theorem drift_sound {k : ℕ} {t₀ T : ℚ}
   simp only [BuildTube, hq] at hdrift
   grind
 
+/-- The segments of a schedule cover `[t₀, T]`: every time lies in some `[τ i, τ (i+1)]`.
+
+Take the largest node `j` with `τ j ≤ t`. If `j` is the last node then `t = T` and the
+final segment works; otherwise maximality of `j` gives `t ≤ τ (j+1)`, so segment `j`
+works. The endpoints are included on both sides, so consecutive segments overlap at
+their shared node and no time is missed. -/
 theorem Schedule.exists_seg {k : ℕ} {t₀ T : ℚ} (sch : Schedule k t₀ T)
     {t : ℝ} (ht : t ∈ Set.Icc (t₀ : ℝ) (T : ℝ)) :
     ∃ i : Fin sch.p,
@@ -699,6 +854,13 @@ theorem Schedule.exists_seg {k : ℕ} {t₀ T : ℚ} (sch : Schedule k t₀ T)
         rw [← hjdef] at this
         simp [Fin.le_def] at this
 
+/-- Global form of `ODE.tube_enclosure`: the twin is in the tube at *every* time of
+`[t₀, T]`.
+
+Combines the per-segment enclosure with `ODE.Schedule.exists_seg`, which locates an
+arbitrary time inside some segment. This is the headline guarantee of the digital-twin
+machinery: a successful `ODE.BuildTube` run certifies a tube that provably contains the
+real trajectory for the entire horizon. -/
 theorem tube_enclosure_global {k : ℕ} {t₀ T : ℚ}
     (sch : Schedule k t₀ T) {f g : ℝ → (ℝ^k) → ℝ^k} {m : ℚ → (ℚ^k) → ℚ^k}
     {Ω : Set (ℝ × ℝ^k)} {εz εm K M : ℚ} {x₀ : ℚ^k} {ρ₀ : ℚ}
