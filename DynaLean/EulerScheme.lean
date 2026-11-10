@@ -46,6 +46,11 @@ def plClamp (N : ℕ) (s : ℚ) : ℚ := S.lOn (min N (S.idx s)) s
 /-- Real-valued view of the interpolant, for comparison with the exact solution. -/
 def plR (s : ℚ) : ℝ := (S.pl s : ℝ)
 
+noncomputable def idxR (s : ℝ) : ℕ := ⌊((s - S.t₀) / S.δ : ℝ)⌋.toNat
+
+noncomputable def plRR (s : ℝ) : ℝ :=
+  (S.x (S.idxR s) : ℝ) + (s - (S.t (S.idxR s) : ℝ)) * (S.m (S.t (S.idxR s)) (S.x (S.idxR s)) : ℝ)
+
 /-! ### Basic rewriting lemmas -/
 
 /-- The first grid time is the initial time. -/
@@ -112,6 +117,22 @@ theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S
       apply Int.floor_eq_zero_iff.2 ⟨ge_0, lt_1⟩
     rw [this]; simp only [zero_add, Int.toNat_natCast]
 
+theorem idxR_eq_of_mem_Ico {n : ℕ} {s : ℝ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
+    S.idxR s = n := by
+  simp only [idxR]
+  have pos : 0 < (S.δ : ℝ) := by exact_mod_cast S.hδ
+  have spos : 0 ≤ (s - S.t₀) / (S.δ : ℝ) := by
+    apply div_nonneg _ pos.le
+    simp only [sub_nonneg]
+    apply le_trans _ h₁
+    simp only [t, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast, le_add_iff_nonneg_right]
+    positivity
+  rw [Int.floor_toNat]
+  rw [Nat.floor_eq_iff spos]
+  field_simp
+  simp only [t] at h₁ h₂
+  push_cast at h₁ h₂
+  grind
 
 /-- On a grid subinterval, the interpolant equals its affine piece. -/
 theorem pl_eq_plOn_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
@@ -176,6 +197,8 @@ def lOn (m : ℕ) (s : ℚ) : ℚ^k :=
 `tₙ ≤ s < tₙ₊₁` when `s ≥ t₀`, and `0` for `s < t₀`. -/
 def idx (s : ℚ) : ℕ := ⌊(s - S.t₀) / S.δ⌋.toNat
 
+noncomputable def idxR (s : ℝ) : ℕ := ⌊((s - S.t₀) / S.δ : ℝ)⌋.toNat
+
 /-- The piecewise-linear interpolant `x̃`. Computable: every ingredient is rational. -/
 def pl (s : ℚ) : ℚ^k := S.lOn (S.idx s) s
 
@@ -184,7 +207,8 @@ is avoided; useful when the theorem is stated on `[t₀, T]` with `T = t_N`). -/
 def plClamp (N : ℕ) (s : ℚ) : ℚ^k := S.lOn (min N (S.idx s)) s
 
 /-- Real-valued view of the interpolant, for comparison with the exact solution. -/
-def plR (s : ℚ) : ℝ^k := (S.pl s : ℝ^k)
+noncomputable def plR (s : ℝ) : ℝ^k := S.x (S.idxR s) +
+  ((s - S.t (S.idxR s)) : ℝ) • (S.m (S.t (S.idxR s)) (S.x (S.idxR s)))
 
 /-! ### Basic rewriting lemmas -/
 
@@ -253,6 +277,22 @@ theorem idx_eq_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S
       apply Int.floor_eq_zero_iff.2 ⟨ge_0, lt_1⟩
     rw [this]; simp only [zero_add, Int.toNat_natCast]
 
+theorem idxR_eq_of_mem_Ico {n : ℕ} {s : ℝ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
+    S.idxR s = n := by
+  simp only [idxR]
+  rw [Int.floor_toNat]
+  have pos : 0 < (S.δ : ℝ) := by exact_mod_cast S.hδ
+  have spos : 0 ≤ (s - S.t₀) / (S.δ : ℝ) := by
+    apply div_nonneg _ pos.le
+    simp only [sub_nonneg]
+    apply le_trans _ h₁
+    simp only [t, Rat.cast_add, Rat.cast_mul, Rat.cast_natCast, le_add_iff_nonneg_right]
+    positivity
+  rw [Nat.floor_eq_iff spos]
+  field_simp
+  simp only [t] at h₁ h₂
+  push_cast at h₁ h₂
+  grind
 
 /-- On a grid subinterval, the interpolant equals its affine piece. -/
 theorem pl_eq_plOn_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s < S.t (n + 1)) :
@@ -263,6 +303,14 @@ theorem pl_eq_plOn_of_mem_Ico {n : ℕ} {s : ℚ} (h₁ : S.t n ≤ s) (h₂ : s
 theorem pl_grid (n : ℕ) : S.pl (S.t n) = S.x n := by
   rw [S.pl_eq_plOn_of_mem_Ico (le_refl _) (by rw [t_succ]; linarith [S.hδ]),
       plOn_left]
+
+theorem plR_grid (n : ℕ) : S.plR ((S.t n) : ℝ) = (S.x n : ℝ^k) := by
+  simp only [plR]
+  have h := idxR_eq_of_mem_Ico S (n := n) (le_refl _)
+    (by rw [t_succ]; push_cast; simp only [lt_add_iff_pos_right,
+    Rat.cast_pos]; exact_mod_cast S.hδ)
+  rw [h]
+  simp only [WithLp.equiv_symm_apply, sub_self, zero_smul, add_zero]
 
 theorem time_mem (T : ℚ) (hT : S.t₀ ≤ T) :
  ∀ n ∈ Finset.range (⌊(T - S.t₀)/S.δ⌋₊ + 1), (S.t n : ℝ) ∈ Set.Icc (S.t₀ : ℝ) (T : ℝ) := by

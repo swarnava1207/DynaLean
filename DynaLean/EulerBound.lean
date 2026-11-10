@@ -9,8 +9,6 @@ public import DynaLean.EulerScheme
 open Topology
 namespace ODE
 
-
-section Scalar
 /-- Taylor's theorem with a first-order term and a second-order remainder. -/
 theorem taylor_upto_two (y : ℝ → ℝ) (hcont : ContDiffOn ℝ 1 y (Set.uIcc t (t + k)))
                         (hk : k ≠ 0)
@@ -34,6 +32,128 @@ theorem taylor_upto_two (y : ℝ → ℝ) (hcont : ContDiffOn ℝ 1 y (Set.uIcc 
               simp only [iteratedDerivWithin_one]
               grind
 
+open Set Filter Metric
+open scoped Interval
+
+open Set Filter Topology Interval
+
+variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
+
+theorem taylor_lagrange_norm_bound_two [CompleteSpace E]
+    {y y' : ℝ → E} {y'' : ℝ → E}
+    {t k M : ℝ} (hk : 0 ≤ k)
+    (hy : ∀ s ∈ Icc t (t + k), HasDerivWithinAt y (y' s) (Icc t (t + k)) s)
+    (hy_cont : ContinuousOn y' (Icc t (t + k)))
+    (hy' : ∀ s ∈ Icc t (t + k), HasDerivWithinAt y' (y'' s) (Icc t (t + k)) s)
+    (hM : ∀ s ∈ Ioo t (t + k), ‖y'' s‖ ≤ M) :
+    ‖y (t + k) - y t - k • y' t‖ ≤ (k^2 / 2) * M := by
+  have ht_le : t ≤ t + k := by linarith
+  have h_stepA : ∀ s ∈ Icc t (t + k), ‖y' s - y' t‖ ≤ M * (s - t) := by
+    intro s hs
+    rcases eq_or_lt_of_le hs.1 with hts | hts
+    · simp [← hts]
+    -- On `[a, t+k]` with `t < a`, the segment mean-value inequality only needs the
+    -- derivative bound on `Ico a (t+k) ⊆ Ioo t (t+k)`.
+    have key : ∀ a ∈ Ioo t s, ‖y' s - y' a‖ ≤ M * (s - a) := by
+      intro a ha
+      have hsub : Icc a (t + k) ⊆ Icc t (t + k) := Icc_subset_Icc ha.1.le le_rfl
+      exact norm_image_sub_le_of_norm_deriv_le_segment'
+        (f := y') (f' := y'') (a := a) (b := t + k) (C := M)
+        (fun u hu => (hy' u (hsub hu)).mono hsub)
+        (fun u hu => hM u ⟨lt_of_lt_of_le ha.1 hu.1, hu.2⟩)
+        s ⟨ha.2.le, hs.2⟩
+    -- Let `a → t⁺`; `y'` is continuous at `t` within `Icc t (t + k)`.
+    have : (𝓝[Ioo t s] t).NeBot := by
+      rw [nhdsWithin_Ioo_eq_nhdsGT hts]; infer_instance
+    have hsub' : Ioo t s ⊆ Icc t (t + k) := fun u hu => ⟨hu.1.le, hu.2.le.trans hs.2⟩
+    have hF : Tendsto (fun a => ‖y' s - y' a‖) (𝓝[Ioo t s] t) (𝓝 ‖y' s - y' t‖) :=
+      ((continuousWithinAt_const (b := y' s)).sub
+        ((hy_cont t ⟨le_rfl, ht_le⟩).mono hsub')).norm
+    have hG : Tendsto (fun a => M * (s - a)) (𝓝[Ioo t s] t) (𝓝 (M * (s - t))) :=
+      ((continuous_const.mul (continuous_const.sub continuous_id)).tendsto t).mono_left
+        nhdsWithin_le_nhds
+    exact le_of_tendsto_of_tendsto hF hG (eventually_mem_nhdsWithin.mono key)
+  have hmint : min t (t + k) = t := by grind
+  have hmax : max t (t + k) = t + k := by grind
+  have h_integrable_y' : IntervalIntegrable y' MeasureTheory.volume t (t + k) :=
+    hy_cont.intervalIntegrable_of_Icc ht_le
+  have hy_cont_y : ContinuousOn y (Icc t (t + k)) := fun s hs => (hy s hs).continuousWithinAt
+  have h_ftc : ∫ s in t..(t + k), y' s = y (t + k) - y t := by
+    refine intervalIntegral.integral_eq_sub_of_hasDeriv_right_of_le ht_le hy_cont_y
+      (fun x hx => ?_) h_integrable_y'
+    exact ((hy x (Ioo_subset_Icc_self hx)).hasDerivAt (Icc_mem_nhds hx.1 hx.2)).hasDerivWithinAt
+  have h_const : ∫ _ in t..(t + k), y' t = k • y' t := by
+    have h_eval := intervalIntegral.integral_const (y' t) (a := t) (b := t + k)
+    have h_sub : (t + k) - t = k := by ring
+    rw [h_sub] at h_eval
+    exact h_eval
+  have h_integrable_const : IntervalIntegrable (fun _ => y' t) MeasureTheory.volume t (t + k) :=
+    intervalIntegrable_const
+  have h_rem_eq : y (t + k) - y t - k • y' t = ∫ s in t..(t + k), (y' s - y' t) := by
+    rw [← h_ftc, ← h_const, ← intervalIntegral.integral_sub h_integrable_y' h_integrable_const]
+  rw [h_rem_eq]
+  have h_norm_le : ‖∫ s in t..(t + k), (y' s - y' t)‖ ≤ ∫ s in t..(t + k), ‖y' s - y' t‖ := by
+    apply intervalIntegral.norm_integral_le_of_norm_le ht_le
+    · filter_upwards with s hs
+      grind
+    · have hcont : ContinuousOn (fun s => ‖y' s - y' t‖) (Icc t (t + k)) := by
+        refine (hy_cont.sub continuousOn_const).norm
+      exact hcont.intervalIntegrable_of_Icc ht_le
+  have h_g_cont : Continuous (fun s : ℝ => M * (s - t)) := by continuity
+  have h_g_int : IntervalIntegrable (fun s => M * (s - t)) MeasureTheory.volume t (t + k) :=
+    h_g_cont.intervalIntegrable t (t + k)
+  have h_diff_cont : ContinuousOn (fun s => ‖y' s - y' t‖) (Icc t (t + k)) := by
+    refine (hy_cont.sub continuousOn_const).norm
+  have h_diff_int : IntervalIntegrable (fun s => ‖y' s - y' t‖) MeasureTheory.volume t (t + k) :=
+    h_diff_cont.intervalIntegrable_of_Icc ht_le
+  have h_mono : (∫ s in t..(t + k), ‖y' s - y' t‖) ≤ ∫ s in t..(t + k), M * (s - t) := by
+    refine intervalIntegral.integral_mono_on ht_le h_diff_int h_g_int (fun s hs => ?_)
+    exact h_stepA s hs
+  have h_eval_integral : (∫ s in t..(t + k), M * (s - t)) = (k^2 / 2) * M := by
+    have h_antideriv : ∀ s ∈ [[t, t + k]],
+        HasDerivAt (fun s => (M / 2) * (s - t)^2) (M * (s - t)) s := by
+      intro s _
+      have hd : HasDerivAt (fun s => (s - t)^2) (2 * (s - t)) s := by
+        have h := (((hasDerivAt_id s).sub_const t).pow 2)
+        simp only [id_eq, Nat.cast_ofNat, Nat.add_one_sub_one, pow_one, mul_one] at h
+        apply HasDerivAt.congr_deriv h (by grind)
+      have hd_mul := hd.const_mul (M / 2)
+      have h_ring : (M / 2) * (2 * (s - t)) = M * (s - t) := by ring
+      rw [h_ring] at hd_mul
+      exact hd_mul
+    have h_ant : ∀ s ∈ Icc t (t + k),
+        deriv (fun s => (M / 2) * (s - t)^2) s = M * (s - t) := by
+      intro s hs
+      specialize h_antideriv s ⟨by rw [hmint]; exact hs.1, by rw [hmax]; exact hs.2⟩
+      rw [h_antideriv.deriv]
+    have h_int_eval := intervalIntegral.integral_deriv_eq_sub
+      (fun s hs => (h_antideriv s hs).differentiableAt)
+      (by
+        apply IntervalIntegrable.congr _ h_g_int
+        intro s hs
+        simp only [h_ant s ⟨by rw [← hmint]; exact hs.1.le, by rw [← hmax]; exact hs.2.ge⟩]
+        )
+    simp only [add_sub_cancel_left,sub_self, ne_eq,
+      OfNat.ofNat_ne_zero, not_false_eq_true, zero_pow, mul_zero] at h_int_eval
+    simp only [differentiableAt_const, deriv_const_mul_field', differentiableAt_fun_id,
+      DifferentiableAt.fun_sub, deriv_fun_pow, Nat.cast_ofNat, Nat.add_one_sub_one, pow_one,
+      deriv_fun_sub, deriv_id'', deriv_const', sub_zero, mul_one,
+      intervalIntegral.integral_const_mul, intervalIntegral.intervalIntegrable_id,
+      intervalIntegrable_const, intervalIntegral.integral_sub, integral_id,
+      intervalIntegral.integral_const, add_sub_cancel_left, smul_eq_mul, mul_eq_mul_left_iff,
+      div_eq_zero_iff, OfNat.ofNat_ne_zero, or_false] at h_int_eval
+    simp only [intervalIntegral.integral_const_mul, intervalIntegral.intervalIntegrable_id,
+      intervalIntegrable_const, intervalIntegral.integral_sub, integral_id,
+      intervalIntegral.integral_const, add_sub_cancel_left, smul_eq_mul]
+    simp only [sq]
+    grind
+  calc ‖∫ s in t..(t + k), (y' s - y' t)‖
+    _ ≤ ∫ s in t..(t + k), ‖y' s - y' t‖ := h_norm_le
+    _ ≤ ∫ s in t..(t + k), M * (s - t)     := h_mono
+    _ = (k^2 / 2) * M                      := h_eval_integral
+
+
+section Scalar
 
 variable {f : ℝ → ℝ → ℝ} {x0 : ℚ} {t₀ T : ℚ}
 
@@ -557,6 +677,239 @@ theorem euler_bound_solution_last (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hMne
           rw [ht₀] at h
           rwa [htn]
 
+theorem euler_bound_cell {ε : ℚ} (y : ℝ → ℝ) (K : NNReal) (M : ℚ) (hM0 : 0 ≤ M)
+      (hT : t₀ < T)
+      (hx : SolutionExists f (x0 : ℝ) y (t₀ : ℝ) (T : ℝ) (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (m : ℚ → ℚ → ℚ)
+      (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : NNReal) (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo (t₀ : ℝ) (T : ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
+      (S : Scheme) (hS : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0) :
+      ∀ i ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊),
+      ∀ s ∈ Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)),
+       |y s - ((S.x i : ℝ) + (s - ((S.t i : ℚ) : ℝ)) * ((S.m (S.t i) (S.x i) : ℚ) : ℝ))|
+        ≤ |y (S.t i) - S.x i| * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
+  set N : ℕ := ⌊(T - S.t₀) / S.δ⌋₊ with hNdef
+  have hε : (0 : ℝ) ≤ ε :=
+    le_trans (b := |f 0 0 - m 0 0|) (by grind) (by exact_mod_cast hf 0 0)
+  have htQ : ∀ j : ℕ, S.t j = t₀ + (j : ℚ) * S.δ := by
+    intro j; rw [Scheme.t_succ', hS.2.1]
+  have hqnn : (0 : ℚ) ≤ (T - S.t₀) / S.δ := by
+    rw [hS.2.1]; exact div_nonneg (by linarith) S.hδ.le
+  have hle : ∀ j : ℕ, j ≤ N → S.t j ≤ T := by
+    intro j hj
+    rw [hNdef] at hj
+    have h1 : ((j : ℕ) : ℚ) ≤ (T - S.t₀) / S.δ := (Nat.le_floor_iff hqnn).mp hj
+    rw [hS.2.1] at h1
+    have h2 : (j : ℚ) * S.δ ≤ T - t₀ := (le_div_iff₀ S.hδ).mp h1
+    rw [htQ]; linarith
+  have hge : ∀ j : ℕ, t₀ ≤ S.t j := by
+    intro j
+    have : (0 : ℚ) ≤ (j : ℚ) * S.δ := mul_nonneg (by positivity) S.hδ.le
+    rw [htQ]; linarith
+  intro i hi s hs
+  have hiN : i < N := Finset.mem_range.mp hi
+  ---------------------------------------------------------------- preamble, verbatim
+  have hne : (S.δ : ℝ) ≠ 0 := by rw [Rat.cast_ne_zero]; exact S.hδ.ne'
+  have hδR : (0 : ℝ) < ((S.δ : ℚ) : ℝ) := by exact_mod_cast S.hδ
+  have hab : ((S.t i : ℚ) : ℝ) < ((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) := by linarith
+  have hstep : (S.t i : ℚ) + S.δ = S.t (i + 1) := by rw [htQ, htQ]; push_cast; ring
+  have hti : ((t₀ : ℚ) : ℝ) ≤ ((S.t i : ℚ) : ℝ) := by exact_mod_cast hge i
+  have htiT : ((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) ≤ ((T : ℚ) : ℝ) := by
+    have h := hle (i + 1) (by omega)
+    rw [← hstep] at h
+    exact_mod_cast h
+  have hIcc : Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))
+      ⊆ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := Set.Icc_subset_Icc hti htiT
+  have hd1 : ContDiffOn ℝ 1
+      (derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))))
+      (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) :=
+    (hcont.mono hIcc).derivWithin (uniqueDiffOn_Icc hab) (by decide)
+  set y'' := fun u => derivWithin
+      (derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))))
+      (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) u with hy''def
+  have hM' : ∀ u ∈ Set.Ioo ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)),
+      ‖y'' u‖ ≤ (M : ℝ) := by
+    intro u hu
+    have hmem : u ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := by grind
+    specialize hM u hmem
+    have hseteq : y'' u = iteratedDeriv 2 y u := by
+      simp only [y'']
+      rw [derivWithin_of_mem_nhds (Icc_mem_nhds hu.1 hu.2)]
+      have h_ev : derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ)
+          (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) =ᶠ[𝓝 u] deriv y := by
+        filter_upwards [(isOpen_Ioo.mem_nhds hu)] with v hv
+        exact derivWithin_of_mem_nhds (Icc_mem_nhds hv.1 hv.2)
+      rw [h_ev.deriv_eq]
+      rw [show (2 : ℕ) = 1 + 1 from rfl, iteratedDeriv_succ, iteratedDeriv_one]
+    rw [hseteq, Real.norm_eq_abs]
+    exact hM
+  have hderivI : derivWithin y
+      (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) ((S.t i : ℚ) : ℝ)
+      = f (S.t i) (y (S.t i)) := by
+    have hmem : ((S.t i : ℚ) : ℝ) ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := ⟨hti, by linarith⟩
+    exact ((hx.2 _ hmem).mono hIcc).derivWithin
+      (uniqueDiffOn_Icc hab _ (Set.left_mem_Icc.mpr hab.le))
+  set θ : ℝ := s - ((S.t i : ℚ) : ℝ) with hθdef
+  have hθ0 : 0 ≤ θ := by simp only [hθdef]; linarith [hs.1]
+  have hθδ : θ ≤ ((S.δ : ℚ) : ℝ) := by simp only [hθdef]; linarith [hs.2]
+  have hsEq : ((S.t i : ℚ) : ℝ) + θ = s := by simp only [hθdef]; ring
+  have hsubI : Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + θ)
+      ⊆ Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)) :=
+    Set.Icc_subset_Icc le_rfl (by linarith)
+  have hcp := taylor_lagrange_norm_bound_two (E := ℝ) (M := (M : ℝ)) (y := y) (y'' := y'')
+      (t := ((S.t i : ℚ) : ℝ)) (k := θ) (hk := hθ0)
+      (hy := fun u hu =>
+        ((((hcont.mono hIcc) u (hsubI hu)).differentiableWithinAt
+            (by decide)).hasDerivWithinAt).mono hsubI)
+      (hy_cont := hd1.continuousOn.mono hsubI)
+      (hy' := fun u hu => by
+        dsimp [y'']
+        exact ((((hd1 u (hsubI hu)).differentiableWithinAt
+            (by decide)).hasDerivWithinAt)).mono hsubI)
+      (hM := fun u hu => hM' u ⟨hu.1, lt_of_lt_of_le hu.2 (by linarith)⟩)
+  rw [hsEq, hderivI, Real.norm_eq_abs, smul_eq_mul] at hcp
+  have hsplit : y s - ((S.x i : ℝ) + θ * ((S.m (S.t i) (S.x i) : ℚ) : ℝ))
+      = (y s - y (S.t i) - θ * f (S.t i) (y (S.t i)))
+        + (y (S.t i) - (S.x i : ℝ))
+        + θ * (f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ)) := by ring
+  have hfm : |f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ)|
+      ≤ (K : ℝ) * |y (S.t i) - (S.x i : ℝ)| + ε := by
+    have hmodel : |f (S.t i) ((S.x i : ℚ) : ℝ) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ)| ≤ (ε : ℝ) := by
+      rw [hS.1]; exact_mod_cast hf (S.t i) (S.x i)
+    have hlip : |f (S.t i) (y (S.t i)) - f (S.t i) ((S.x i : ℚ) : ℝ)|
+        ≤ (K : ℝ) * |y (S.t i) - (S.x i : ℝ)| := by
+      have hmem : ((S.t i : ℚ) : ℝ) ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := ⟨hti, by linarith⟩
+      have h := (hK (S.t i) hmem).dist_le_mul (y (S.t i)) ((S.x i : ℚ) : ℝ)
+      rwa [Real.dist_eq, Real.dist_eq] at h
+    calc |f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ)|
+        ≤ |f (S.t i) (y (S.t i)) - f (S.t i) ((S.x i : ℚ) : ℝ)|
+          + |f (S.t i) ((S.x i : ℚ) : ℝ) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ)| := by
+          have := abs_add_le (f (S.t i) (y (S.t i)) - f (S.t i) ((S.x i : ℚ) : ℝ))
+                          (f (S.t i) ((S.x i : ℚ) : ℝ) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ))
+          simpa using this
+      _ ≤ _ := by linarith
+  have hC : |θ * (f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ) : ℝ))|
+      ≤ θ * ((K : ℝ) * |y (S.t i) - (S.x i : ℝ)| + ε) := by
+    rw [abs_mul, abs_of_nonneg hθ0]
+    exact mul_le_mul_of_nonneg_left hfm hθ0
+  have hMR : (0 : ℝ) ≤ (M : ℝ) := by exact_mod_cast hM0
+  have hθsq : θ ^ 2 ≤ ((S.δ : ℚ) : ℝ) ^ 2 := by nlinarith [hθ0, hθδ]
+  have hA : |y s - y (S.t i) - θ * f (S.t i) (y (S.t i))|
+      ≤ ((S.δ : ℚ) : ℝ) ^ 2 / 2 * (M : ℝ) :=
+    hcp.trans (mul_le_mul_of_nonneg_right (by linarith) hMR)
+  have hKBε : (0 : ℝ) ≤ (K : ℝ) * |y (S.t i) - (S.x i : ℝ)| + (ε : ℝ) :=
+    add_nonneg (mul_nonneg K.coe_nonneg (abs_nonneg _)) hε
+  have hC2 := hC.trans (mul_le_mul_of_nonneg_right hθδ hKBε)
+  rw [hsplit]
+  refine le_trans (abs_add_three _ _ _) ?_
+  exact le_trans (add_le_add (add_le_add hA le_rfl) hC2) (le_of_eq (by ring))
+
+theorem euler_bound_solution_all {y : ℝ → ℝ} {ε K : ℚ} (M : ℚ) (hMne : M > 0)
+      (hKne : K > (0 : ℝ))
+      (hx : SolutionExists f (x0 : ℝ) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
+              (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (m : ℚ → ℚ → ℚ)
+      (hf : ∀ t x : ℚ, |f t x - m t x| ≤ ε)
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : ℝ).toNNReal (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ), |iteratedDeriv 2 y t| ≤ (M : ℝ))
+      (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T)
+      (S : Scheme) (hS : S = LastSchema t₀ T x0 m N hN ht) :
+      ∀ s ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ),
+        |y s - S.plRR s|
+          ≤ ((↑ε + ↑M * ↑S.δ / 2) * ↑S.δ) * (((1 + K*S.δ) ^ N) - 1)/(K * S.δ) := by
+  have hS' : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0 := by
+    simp only [hS]; exact ⟨rfl, rfl, rfl⟩
+  have hδeq : S.δ = (T - t₀) / N := by rw [hS]; rfl
+  have hNQ : ((N : ℕ) : ℚ) ≠ 0 := Nat.cast_ne_zero.mpr hN
+  have hdiv : (T - S.t₀) / S.δ = ((N : ℕ) : ℚ) := by rw [hS'.2.1, hδeq]; field_simp; grind
+  have hfloor : ⌊(T - S.t₀) / S.δ⌋₊ = N := by rw [hdiv]; simp
+  have htN : S.t N = T := by
+    simp only [hS, Scheme.t_succ', LastSchema]; field_simp; ring
+  have hKR : (0 : ℝ) < (K : ℝ) := hKne
+  have hδR : (0 : ℝ) < ((S.δ : ℚ) : ℝ) := by exact_mod_cast S.hδ
+  have hεR : (0 : ℝ) ≤ (ε : ℝ) :=
+    le_trans (b := |f 0 0 - m 0 0|) (by grind) (by exact_mod_cast hf 0 0)
+  have hMR : (0 : ℝ) ≤ (M : ℝ) := by exact_mod_cast hMne.le
+  set A : ℝ := ((ε : ℝ) + (M : ℝ) * ((S.δ : ℚ) : ℝ) / 2) * ((S.δ : ℚ) : ℝ) with hAdef
+  have hAnn : 0 ≤ A := by rw [hAdef]; positivity
+  set EBr : ℕ → ℝ := fun j => A * (((1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) ^ j) - 1)
+                                / ((K : ℝ) * ((S.δ : ℚ) : ℝ)) with hEBrdef
+  have hEBapp : ∀ j : ℕ, EBr j
+      = A * (((1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) ^ j) - 1) / ((K : ℝ) * ((S.δ : ℚ) : ℝ)) := by
+    intro j; simp only [hEBrdef]
+  have hEBrec : ∀ j : ℕ, EBr j * (1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) + A = EBr (j + 1) := by
+    intro j; simp only [hEBrdef]; field_simp; ring
+  have hEBmono : Monotone EBr := by
+    intro a b hab
+    simp only [hEBrdef]
+    gcongr
+    simp only [le_add_iff_nonneg_right]
+    positivity
+  have hgrid := euler_bound_solution_rational (f := f) (x0 := x0) (t₀ := t₀) (T := T)
+      M hMne hKne hx hcont S ht (by rw [hS'.1]; exact hf) hK hM hS'.2
+  have hgrid' : ∀ j : ℕ, j ≤ N → |y (S.t j) - (S.x j : ℝ)| ≤ EBr j := by
+    intro j hj
+    have hmem : j ∈ Finset.range (⌊(T - t₀) / S.δ⌋₊ + 1) := by
+      rw [← hS'.2.1, hfloor]; exact Finset.mem_range.mpr (by omega)
+    simpa [hEBapp, hAdef, mul_comm, mul_assoc, mul_left_comm] using hgrid j hmem
+  have hcell := euler_bound_cell (f := f) (x0 := x0) (t₀ := t₀) (T := T)
+      y (K : ℝ).toNNReal M hMne.le ht hx hcont m hf hK hM S hS'
+  intro s hs
+  rw [← hEBapp N]
+  set n : ℕ := S.idxR s with hndef
+  set q : ℝ := (s - ((S.t₀ : ℚ) : ℝ)) / ((S.δ : ℚ) : ℝ) with hqdef
+  have ht₀S : S.t₀ = t₀ := hS'.2.1
+  have hq0 : 0 ≤ q := by rw [hqdef, ht₀S]; exact div_nonneg (by linarith [hs.1]) hδR.le
+  have hqN : q ≤ (N : ℝ) := by
+    rw [hqdef, ht₀S, div_le_iff₀ hδR]
+    have : ((T : ℚ) : ℝ) = ((t₀ : ℚ) : ℝ) + (N : ℝ) * ((S.δ : ℚ) : ℝ) := by
+      rw [← htN]; simp only [Scheme.t_succ', ht₀S]; push_cast; ring
+    linarith [hs.2]
+  have hfl0 : 0 ≤ ⌊q⌋ := Int.le_floor.mpr (by exact_mod_cast hq0)
+  have hncast : (n : ℝ) = (⌊q⌋ : ℝ) := by
+    rw [hndef, Scheme.idxR, ← hqdef]
+    norm_cast
+    simp only [Int.ofNat_toNat, sup_eq_left]
+    exact hfl0
+  have hnq : (n : ℝ) ≤ q := by rw [hncast]; exact Int.floor_le q
+  have hqn : q < (n : ℝ) + 1 := by rw [hncast]; exact Int.lt_floor_add_one q
+  have hnN : n ≤ N := by
+    have : (n : ℝ) ≤ (N : ℝ) := le_trans hnq hqN
+    exact_mod_cast this
+  have hs' : s = ((S.t₀ : ℚ) : ℝ) + q * ((S.δ : ℚ) : ℝ) := by rw [hqdef]; field_simp; grind
+  have htn_le : ((S.t n : ℚ) : ℝ) ≤ s := by
+    rw [hs']; simp only [Scheme.t_succ']; push_cast; nlinarith [hnq, hδR]
+  have hs_le : s ≤ ((S.t n : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) := by
+    rw [hs']; simp only [Scheme.t_succ']; push_cast; nlinarith [hqn, hδR]
+  have hplR : S.plRR s
+      = (S.x n : ℝ) + (s - ((S.t n : ℚ) : ℝ)) * ((S.m (S.t n) (S.x n) : ℚ) : ℝ) := by
+    simp only [Scheme.plRR, ← hndef]
+  rcases lt_or_eq_of_le hnN with hlt | heq
+  · rw [hplR]
+    refine le_trans (hcell n (by rw [hfloor]; exact Finset.mem_range.mpr hlt) s
+        ⟨htn_le, hs_le⟩) ?_
+    have hKcast : (((K : ℝ).toNNReal : NNReal) : ℝ) = (K : ℝ) := by
+      simp only [Real.toNNReal]
+      simp only [NNReal.coe_mk, sup_eq_left, Rat.cast_nonneg]
+      exact_mod_cast hKne.le
+    rw [hKcast]
+    calc |y (S.t n) - (S.x n : ℝ)| * (1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) + A
+        ≤ EBr n * (1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) + A := by
+          have h1 : (0 : ℝ) ≤ 1 + (K : ℝ) * ((S.δ : ℚ) : ℝ) := by positivity
+          exact add_le_add_left
+            (mul_le_mul_of_nonneg_right (hgrid' n hlt.le) h1) A
+      _ = EBr (n + 1) := hEBrec n
+      _ ≤ EBr N := hEBmono (by omega)
+  · subst heq
+    have hsT : s = ((S.t n : ℚ) : ℝ) :=
+      le_antisymm (by rw [htN]; exact hs.2) htn_le
+    rw [hplR, hsT]
+    simp only [sub_self, zero_mul, add_zero]
+    exact hgrid' n le_rfl
+
 
 end Scalar
 
@@ -568,122 +921,6 @@ open Set Filter Metric
 open scoped Interval
 
 open Set Filter Topology Interval
-
-variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
-
-theorem taylor_lagrange_norm_bound_two [CompleteSpace E]
-    {y y' : ℝ → E} {y'' : ℝ → E}
-    {t k M : ℝ} (hk : 0 ≤ k)
-    (hy : ∀ s ∈ Icc t (t + k), HasDerivWithinAt y (y' s) (Icc t (t + k)) s)
-    (hy_cont : ContinuousOn y' (Icc t (t + k)))
-    (hy' : ∀ s ∈ Icc t (t + k), HasDerivWithinAt y' (y'' s) (Icc t (t + k)) s)
-    (hM : ∀ s ∈ Ioo t (t + k), ‖y'' s‖ ≤ M) :
-    ‖y (t + k) - y t - k • y' t‖ ≤ (k^2 / 2) * M := by
-  have ht_le : t ≤ t + k := by linarith
-  have h_stepA : ∀ s ∈ Icc t (t + k), ‖y' s - y' t‖ ≤ M * (s - t) := by
-    intro s hs
-    rcases eq_or_lt_of_le hs.1 with hts | hts
-    · simp [← hts]
-    -- On `[a, t+k]` with `t < a`, the segment mean-value inequality only needs the
-    -- derivative bound on `Ico a (t+k) ⊆ Ioo t (t+k)`.
-    have key : ∀ a ∈ Ioo t s, ‖y' s - y' a‖ ≤ M * (s - a) := by
-      intro a ha
-      have hsub : Icc a (t + k) ⊆ Icc t (t + k) := Icc_subset_Icc ha.1.le le_rfl
-      exact norm_image_sub_le_of_norm_deriv_le_segment'
-        (f := y') (f' := y'') (a := a) (b := t + k) (C := M)
-        (fun u hu => (hy' u (hsub hu)).mono hsub)
-        (fun u hu => hM u ⟨lt_of_lt_of_le ha.1 hu.1, hu.2⟩)
-        s ⟨ha.2.le, hs.2⟩
-    -- Let `a → t⁺`; `y'` is continuous at `t` within `Icc t (t + k)`.
-    have : (𝓝[Ioo t s] t).NeBot := by
-      rw [nhdsWithin_Ioo_eq_nhdsGT hts]; infer_instance
-    have hsub' : Ioo t s ⊆ Icc t (t + k) := fun u hu => ⟨hu.1.le, hu.2.le.trans hs.2⟩
-    have hF : Tendsto (fun a => ‖y' s - y' a‖) (𝓝[Ioo t s] t) (𝓝 ‖y' s - y' t‖) :=
-      ((continuousWithinAt_const (b := y' s)).sub
-        ((hy_cont t ⟨le_rfl, ht_le⟩).mono hsub')).norm
-    have hG : Tendsto (fun a => M * (s - a)) (𝓝[Ioo t s] t) (𝓝 (M * (s - t))) :=
-      ((continuous_const.mul (continuous_const.sub continuous_id)).tendsto t).mono_left
-        nhdsWithin_le_nhds
-    exact le_of_tendsto_of_tendsto hF hG (eventually_mem_nhdsWithin.mono key)
-  have hmint : min t (t + k) = t := by grind
-  have hmax : max t (t + k) = t + k := by grind
-  have h_integrable_y' : IntervalIntegrable y' MeasureTheory.volume t (t + k) :=
-    hy_cont.intervalIntegrable_of_Icc ht_le
-  have hy_cont_y : ContinuousOn y (Icc t (t + k)) := fun s hs => (hy s hs).continuousWithinAt
-  have h_ftc : ∫ s in t..(t + k), y' s = y (t + k) - y t := by
-    refine intervalIntegral.integral_eq_sub_of_hasDeriv_right_of_le ht_le hy_cont_y
-      (fun x hx => ?_) h_integrable_y'
-    exact ((hy x (Ioo_subset_Icc_self hx)).hasDerivAt (Icc_mem_nhds hx.1 hx.2)).hasDerivWithinAt
-  have h_const : ∫ _ in t..(t + k), y' t = k • y' t := by
-    have h_eval := intervalIntegral.integral_const (y' t) (a := t) (b := t + k)
-    have h_sub : (t + k) - t = k := by ring
-    rw [h_sub] at h_eval
-    exact h_eval
-  have h_integrable_const : IntervalIntegrable (fun _ => y' t) MeasureTheory.volume t (t + k) :=
-    intervalIntegrable_const
-  have h_rem_eq : y (t + k) - y t - k • y' t = ∫ s in t..(t + k), (y' s - y' t) := by
-    rw [← h_ftc, ← h_const, ← intervalIntegral.integral_sub h_integrable_y' h_integrable_const]
-  rw [h_rem_eq]
-  have h_norm_le : ‖∫ s in t..(t + k), (y' s - y' t)‖ ≤ ∫ s in t..(t + k), ‖y' s - y' t‖ := by
-    apply intervalIntegral.norm_integral_le_of_norm_le ht_le
-    · filter_upwards with s hs
-      grind
-    · have hcont : ContinuousOn (fun s => ‖y' s - y' t‖) (Icc t (t + k)) := by
-        refine (hy_cont.sub continuousOn_const).norm
-      exact hcont.intervalIntegrable_of_Icc ht_le
-  have h_g_cont : Continuous (fun s : ℝ => M * (s - t)) := by continuity
-  have h_g_int : IntervalIntegrable (fun s => M * (s - t)) MeasureTheory.volume t (t + k) :=
-    h_g_cont.intervalIntegrable t (t + k)
-  have h_diff_cont : ContinuousOn (fun s => ‖y' s - y' t‖) (Icc t (t + k)) := by
-    refine (hy_cont.sub continuousOn_const).norm
-  have h_diff_int : IntervalIntegrable (fun s => ‖y' s - y' t‖) MeasureTheory.volume t (t + k) :=
-    h_diff_cont.intervalIntegrable_of_Icc ht_le
-  have h_mono : (∫ s in t..(t + k), ‖y' s - y' t‖) ≤ ∫ s in t..(t + k), M * (s - t) := by
-    refine intervalIntegral.integral_mono_on ht_le h_diff_int h_g_int (fun s hs => ?_)
-    exact h_stepA s hs
-  have h_eval_integral : (∫ s in t..(t + k), M * (s - t)) = (k^2 / 2) * M := by
-    have h_antideriv : ∀ s ∈ [[t, t + k]],
-        HasDerivAt (fun s => (M / 2) * (s - t)^2) (M * (s - t)) s := by
-      intro s _
-      have hd : HasDerivAt (fun s => (s - t)^2) (2 * (s - t)) s := by
-        have h := (((hasDerivAt_id s).sub_const t).pow 2)
-        simp only [id_eq, Nat.cast_ofNat, Nat.add_one_sub_one, pow_one, mul_one] at h
-        apply HasDerivAt.congr_deriv h (by grind)
-      have hd_mul := hd.const_mul (M / 2)
-      have h_ring : (M / 2) * (2 * (s - t)) = M * (s - t) := by ring
-      rw [h_ring] at hd_mul
-      exact hd_mul
-    have h_ant : ∀ s ∈ Icc t (t + k),
-        deriv (fun s => (M / 2) * (s - t)^2) s = M * (s - t) := by
-      intro s hs
-      specialize h_antideriv s ⟨by rw [hmint]; exact hs.1, by rw [hmax]; exact hs.2⟩
-      rw [h_antideriv.deriv]
-    have h_int_eval := intervalIntegral.integral_deriv_eq_sub
-      (fun s hs => (h_antideriv s hs).differentiableAt)
-      (by
-        apply IntervalIntegrable.congr _ h_g_int
-        intro s hs
-        simp only [h_ant s ⟨by rw [← hmint]; exact hs.1.le, by rw [← hmax]; exact hs.2.ge⟩]
-        )
-    simp only [add_sub_cancel_left,sub_self, ne_eq,
-      OfNat.ofNat_ne_zero, not_false_eq_true, zero_pow, mul_zero] at h_int_eval
-    simp only [differentiableAt_const, deriv_const_mul_field', differentiableAt_fun_id,
-      DifferentiableAt.fun_sub, deriv_fun_pow, Nat.cast_ofNat, Nat.add_one_sub_one, pow_one,
-      deriv_fun_sub, deriv_id'', deriv_const', sub_zero, mul_one,
-      intervalIntegral.integral_const_mul, intervalIntegral.intervalIntegrable_id,
-      intervalIntegrable_const, intervalIntegral.integral_sub, integral_id,
-      intervalIntegral.integral_const, add_sub_cancel_left, smul_eq_mul, mul_eq_mul_left_iff,
-      div_eq_zero_iff, OfNat.ofNat_ne_zero, or_false] at h_int_eval
-    simp only [intervalIntegral.integral_const_mul, intervalIntegral.intervalIntegrable_id,
-      intervalIntegrable_const, intervalIntegral.integral_sub, integral_id,
-      intervalIntegral.integral_const, add_sub_cancel_left, smul_eq_mul]
-    simp only [sq]
-    grind
-  calc ‖∫ s in t..(t + k), (y' s - y' t)‖
-    _ ≤ ∫ s in t..(t + k), ‖y' s - y' t‖ := h_norm_le
-    _ ≤ ∫ s in t..(t + k), M * (s - t)     := h_mono
-    _ = (k^2 / 2) * M                      := h_eval_integral
-
 
 variable {k : ℕ} (f : ℝ → (ℝ^k) → ℝ^k) (x0 : ℚ^k) (t₀ T : ℚ)
 theorem euler_bound_solution_iterate_vector {ε : ℚ} (y : ℝ → ℝ^k) (K : NNReal) (M : ℚ)
@@ -1036,7 +1273,268 @@ theorem euler_bound_solution_last_vector {ε : ℚ} (K : ℚ) (M : ℚ) (hMne : 
           rw [htn] at h
           have ht₀ : S.t₀ = t₀ := by simp only [hS]; rfl
           rwa [htn]
-end Vector
 
+theorem euler_bound_cell_vector {ε : ℚ} (y : ℝ → ℝ^k) (K : NNReal) (M : ℚ) (hM0 : 0 ≤ M)
+      (hT : t₀ < T)
+      (hx : SolutionExistsVector f (x0 : ℝ^k) y (t₀ : ℝ) (T : ℝ) (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc (t₀ : ℝ) (T : ℝ)))
+      (m : ℚ → (ℚ^k) → ℚ^k)
+      (hf : ∀ (t : ℚ) (x : ℚ^k), ‖f t x - m t x‖ ≤ ε)
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : NNReal) (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo (t₀ : ℝ) (T : ℝ), ‖iteratedDeriv 2 y t‖ ≤ (M : ℝ))
+      (S : VectorScheme k) (hS : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0) :
+      ∀ i ∈ Finset.range (⌊(T - S.t₀) / S.δ⌋₊),
+      ∀ s ∈ Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)),
+       ‖y s - ((S.x i : ℝ^k) + (s - ((S.t i : ℚ) : ℝ)) • ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k))‖
+        ≤ ‖y (S.t i) - S.x i‖ * (1 + K * S.δ) + (ε + M * S.δ/2) * S.δ := by
+  set N : ℕ := ⌊(T - S.t₀) / S.δ⌋₊ with hNdef
+  have hε : (0 : ℝ) ≤ ε := le_trans (b := ‖f 0 0 - m 0 0‖) (by grind)
+    (by specialize hf 0 0; simp only [Rat.cast_zero,
+        PiLp.zero_apply, WithLp.equiv_symm_apply] at hf; simp only [WithLp.equiv_symm_apply]
+        have : (WithLp.toLp 2 fun (i : Fin k) ↦ (0 : ℝ)) = 0 := rfl
+        rw [this] at hf; exact hf)
+  have htQ : ∀ j : ℕ, S.t j = t₀ + (j : ℚ) * S.δ := by
+    intro j; rw [VectorScheme.t_succ', hS.2.1]
+  have hqnn : (0 : ℚ) ≤ (T - S.t₀) / S.δ := by
+    rw [hS.2.1]; exact div_nonneg (by linarith) S.hδ.le
+  have hle : ∀ j : ℕ, j ≤ N → S.t j ≤ T := by
+    intro j hj
+    rw [hNdef] at hj
+    have h1 : ((j : ℕ) : ℚ) ≤ (T - S.t₀) / S.δ := (Nat.le_floor_iff hqnn).mp hj
+    rw [hS.2.1] at h1
+    have h2 : (j : ℚ) * S.δ ≤ T - t₀ := (le_div_iff₀ S.hδ).mp h1
+    rw [htQ]; linarith
+  have hge : ∀ j : ℕ, t₀ ≤ S.t j := by
+    intro j
+    have : (0 : ℚ) ≤ (j : ℚ) * S.δ := mul_nonneg (by positivity) S.hδ.le
+    rw [htQ]; linarith
+  intro i hi s hs
+  have hiN : i < N := Finset.mem_range.mp hi
+  have hne : (S.δ : ℝ) ≠ 0 := by rw [Rat.cast_ne_zero]; exact S.hδ.ne'
+  have hδR : (0 : ℝ) < ((S.δ : ℚ) : ℝ) := by exact_mod_cast S.hδ
+  have hab : ((S.t i : ℚ) : ℝ) < ((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) := by linarith
+  have hstep : (S.t i : ℚ) + S.δ = S.t (i + 1) := by rw [htQ, htQ]; push_cast; ring
+  have hti : ((t₀ : ℚ) : ℝ) ≤ ((S.t i : ℚ) : ℝ) := by exact_mod_cast hge i
+  have htiT : ((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) ≤ ((T : ℚ) : ℝ) := by
+    have h := hle (i + 1) (by omega)
+    rw [← hstep] at h
+    exact_mod_cast h
+  have hIcc : Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))
+      ⊆ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := Set.Icc_subset_Icc hti htiT
+  have hd1 : ContDiffOn ℝ 1
+      (derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))))
+      (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) :=
+    (hcont.mono hIcc).derivWithin (uniqueDiffOn_Icc hab) (by decide)
+  set y'' := fun u => derivWithin
+      (derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))))
+      (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) u with hy''def
+  have hM' : ∀ u ∈ Set.Ioo ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)),
+      ‖y'' u‖ ≤ (M : ℝ) := by
+    intro u hu
+    have hmem : u ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := by grind
+    specialize hM u hmem
+    have hseteq : y'' u = iteratedDeriv 2 y u := by
+      dsimp [y'']
+      rw [derivWithin_of_mem_nhds (Icc_mem_nhds hu.1 hu.2)]
+      have h_ev : derivWithin y (Set.Icc ((S.t i : ℚ) : ℝ)
+          (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) =ᶠ[𝓝 u] deriv y := by
+        filter_upwards [(isOpen_Ioo.mem_nhds hu)] with v hv
+        exact derivWithin_of_mem_nhds (Icc_mem_nhds hv.1 hv.2)
+      rw [h_ev.deriv_eq]
+      rw [show (2 : ℕ) = 1 + 1 from rfl, iteratedDeriv_succ, iteratedDeriv_one]
+    rw [hseteq]; exact hM
+  have hderivI : derivWithin y
+      (Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ))) ((S.t i : ℚ) : ℝ)
+      = f (S.t i) (y (S.t i)) := by
+    have hmem : ((S.t i : ℚ) : ℝ) ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := ⟨hti, by linarith⟩
+    exact ((hx.2 _ hmem).mono hIcc).derivWithin
+      (uniqueDiffOn_Icc hab _ (Set.left_mem_Icc.mpr hab.le))
+  set θ : ℝ := s - ((S.t i : ℚ) : ℝ) with hθdef
+  have hθ0 : 0 ≤ θ := by simp only [hθdef]; linarith [hs.1]
+  have hθδ : θ ≤ ((S.δ : ℚ) : ℝ) := by simp only [hθdef]; linarith [hs.2]
+  have hsEq : ((S.t i : ℚ) : ℝ) + θ = s := by simp only [hθdef]; ring
+  have hsubI : Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + θ)
+      ⊆ Set.Icc ((S.t i : ℚ) : ℝ) (((S.t i : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ)) :=
+    Set.Icc_subset_Icc le_rfl (by linarith)
+  have hcp := taylor_lagrange_norm_bound_two (M := (M : ℝ)) (y := y) (y'' := y'')
+      (t := ((S.t i : ℚ) : ℝ)) (k := θ) (hk := hθ0)
+      (hy := fun u hu =>
+        ((((hcont.mono hIcc) u (hsubI hu)).differentiableWithinAt
+            (by decide)).hasDerivWithinAt).mono hsubI)
+      (hy_cont := hd1.continuousOn.mono hsubI)
+      (hy' := fun u hu => by
+        dsimp [y'']
+        exact ((((hd1 u (hsubI hu)).differentiableWithinAt
+            (by decide)).hasDerivWithinAt)).mono hsubI)
+      (hM := fun u hu => hM' u ⟨hu.1, lt_of_lt_of_le hu.2 (by linarith)⟩)
+  rw [hsEq, hderivI] at hcp
+  have hsplit : y s - ((S.x i : ℝ^k) + θ • ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k))
+      = (y s - y (S.t i) - θ • f (S.t i) (y (S.t i)))
+        + (y (S.t i) - (S.x i : ℝ^k))
+        + θ • (f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k)) := by
+    rw [smul_sub]; abel
+  have tri : ∀ a b c : ℝ^k, ‖a + b + c‖ ≤ ‖a‖ + ‖b‖ + ‖c‖ := by
+    intro a b c
+    exact (norm_add_le (a + b) c).trans (add_le_add_left (norm_add_le a b) ‖c‖)
+  -- the Lipschitz / model-error factor
+  have hfm : ‖f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k)‖
+      ≤ (K : ℝ) * ‖y (S.t i) - (S.x i : ℝ^k)‖ + ε := by
+    have hsplit'' : ‖f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k)‖
+        ≤ ‖f (S.t i) (y (S.t i)) - f (S.t i) (S.x i)‖
+          + ‖f (S.t i) (S.x i) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k)‖ := by
+      calc ‖f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k)‖
+          = ‖(f (S.t i) (y (S.t i)) - f (S.t i) (S.x i))
+              + (f (S.t i) (S.x i) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k))‖ := by
+            congr 1; abel
+        _ ≤ _ := norm_add_le _ _
+    have hmodel : ‖f (S.t i) (S.x i) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k)‖ ≤ ε := by
+      rw [hS.1]; exact hf (S.t i) (S.x i)
+    have hlip : ‖f (S.t i) (y (S.t i)) - f (S.t i) (S.x i)‖
+        ≤ (K : ℝ) * ‖y (S.t i) - (S.x i : ℝ^k)‖ := by
+      have hmem : ((S.t i : ℚ) : ℝ) ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := ⟨hti, by linarith⟩
+      have h := (hK (S.t i) hmem).dist_le_mul (y (S.t i)) ((S.x i : ℚ^k) : ℝ^k)
+      rwa [dist_eq_norm, dist_eq_norm] at h
+    linarith
+  have hC : ‖θ • (f (S.t i) (y (S.t i)) - ((S.m (S.t i) (S.x i) : ℚ^k) : ℝ^k))‖
+      ≤ θ * ((K : ℝ) * ‖y (S.t i) - (S.x i : ℝ^k)‖ + ε) := by
+    rw [norm_smul, Real.norm_eq_abs, abs_of_nonneg hθ0]
+    exact mul_le_mul_of_nonneg_left hfm hθ0
+  have hBnn : (0 : ℝ) ≤ ‖y (S.t i) - (S.x i : ℝ^k)‖ := norm_nonneg _
+  have hKnn : (0 : ℝ) ≤ (K : ℝ) := K.coe_nonneg
+  have hMR : (0 : ℝ) ≤ (M : ℝ) := by exact_mod_cast hM0
+  have hθsq : θ ^ 2 ≤ ((S.δ : ℚ) : ℝ) ^ 2 := by
+    rw [sq_le_sq]
+    rw [abs_of_nonneg hθ0, abs_of_nonneg (by exact_mod_cast S.hδ.le)]
+    grind
+  rw [hsplit]
+  refine (tri _ _ _).trans ?_
+  have hA : ‖y s - y (S.t i) - θ • f (S.t i) (y (S.t i))‖
+      ≤ ((S.δ : ℚ) : ℝ) ^ 2 / 2 * (M : ℝ) := by
+    refine hcp.trans ?_
+    have : θ ^ 2 / 2 ≤ ((S.δ : ℚ) : ℝ) ^ 2 / 2 := by linarith
+    exact mul_le_mul_of_nonneg_right this hMR
+  have hKBε : (0 : ℝ) ≤ (K : ℝ) * ‖y (S.t i) - ((S.x i : ℚ^k) : ℝ^k)‖ + (ε : ℝ) :=
+  add_nonneg (mul_nonneg K.coe_nonneg (norm_nonneg _)) hε
+  have hC2 := hC.trans (mul_le_mul_of_nonneg_right hθδ hKBε)
+  exact le_trans (add_le_add (add_le_add hA le_rfl) hC2) (le_of_eq (by ring))
+
+theorem euler_bound_solution_all_vector {ε : ℚ} (K : ℚ) (M : ℚ) (hMne : M > 0)
+      (hKne : K > (0 : ℝ))
+      (hx : SolutionExistsVector f (x0 : ℝ^k) y ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)
+              (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (hcont : ContDiffOn ℝ 2 y (Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ)))
+      (m : ℚ → (ℚ^k) → ℚ^k)
+      (hf : ∀ (t : ℚ) (x : ℚ^k), ‖f t (x : ℝ^k) - m t x‖ ≤ ε)
+      (hK : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : ℝ).toNNReal (fun x => f t x))
+      (hM : ∀ t ∈ Set.Ioo ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ), ‖iteratedDeriv 2 y t‖ ≤ (M : ℝ))
+      (N : ℕ) (hN : N ≠ 0) (ht : t₀ < T)
+      (S : VectorScheme k) (hS : S = LastVectorSchema t₀ T x0 m N hN ht) :
+      ∀ s ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ),
+        ‖y s - S.plR s‖
+          ≤ ((↑ε + ↑M * ↑S.δ / 2) * ↑S.δ) * (((1 + K*S.δ) ^ N) - 1)/(K * S.δ) := by
+  have hS' : S.m = m ∧ S.t₀ = t₀ ∧ S.x₀ = x0 := by
+    simp only [hS]; exact ⟨rfl, rfl, rfl⟩
+  have hδeq : S.δ = (T - t₀) / N := by rw [hS]; rfl
+  have hNQ : ((N : ℕ) : ℚ) ≠ 0 := Nat.cast_ne_zero.mpr hN
+  have hdiv : (T - S.t₀) / S.δ = ((N : ℕ) : ℚ) := by rw [hS'.2.1, hδeq]; field_simp; grind
+  have hfloor : ⌊(T - S.t₀) / S.δ⌋₊ = N := by rw [hdiv]; simp
+  have htN : S.t N = T := by
+    simp only [hS, VectorScheme.t_succ', LastVectorSchema]; field_simp; ring
+  have hKR : (0 : ℝ) < (K : ℝ) := hKne
+  have hδR : (0 : ℝ) < ((S.δ : ℚ) : ℝ) := by exact_mod_cast S.hδ
+  have hKδ : (0 : ℝ) < (K : ℝ) * ((S.δ : ℚ) : ℝ) := by positivity
+  have hεR : (0 : ℝ) ≤ (ε : ℝ) := le_trans (b := ‖f 0 0 - m 0 0‖) (by grind)
+    (by specialize hf 0 0; simp only [Rat.cast_zero,
+        PiLp.zero_apply, WithLp.equiv_symm_apply] at hf; simp only [WithLp.equiv_symm_apply]
+        have : (WithLp.toLp 2 fun (i : Fin k) ↦ (0 : ℝ)) = 0 := rfl
+        rw [this] at hf; exact hf)
+  have hMR : (0 : ℝ) ≤ (M : ℝ) := by exact_mod_cast hMne.le
+  set A : ℝ := ((ε : ℝ) + (M : ℝ) * ((S.δ : ℚ) : ℝ) / 2) * ((S.δ : ℚ) : ℝ) with hAdef
+  have hAnn : 0 ≤ A := by rw [hAdef]; positivity
+  set EBr : ℕ → ℝ := fun j => A * (((1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) ^ j) - 1)
+                                / ((K : ℝ) * ((S.δ : ℚ) : ℝ)) with hEBrdef
+  have hEBrec : ∀ j : ℕ, EBr j * (1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) + A = EBr (j + 1) := by
+    intro j; simp only [hEBrdef]; field_simp; ring
+  have hEBmono : Monotone EBr := by
+    intro a b hab
+    simp only [hEBrdef]
+    gcongr
+    simp only [le_add_iff_nonneg_right]
+    positivity
+  have hgrid := euler_bound_solution_rational_vector f x0 t₀ T M hMne
+      (by exact_mod_cast hKne) hx hcont S ht (by rw [hS'.1]; exact hf) hK hM hS'.2
+  have hgrid' : ∀ j : ℕ, j ≤ N → ‖y (S.t j) - (S.x j : ℝ^k)‖ ≤ EBr j := by
+    intro j hj
+    have hmem : j ∈ Finset.range (⌊(T - t₀) / S.δ⌋₊ + 1) := by
+      rw [← hS'.2.1, hfloor]; exact Finset.mem_range.mpr (by omega)
+    simpa [hEBrdef, hAdef, mul_comm, mul_assoc, mul_left_comm] using hgrid j hmem
+  have hcell := euler_bound_cell_vector f x0 t₀ T y (K : ℝ).toNNReal M hMne.le ht hx hcont m
+      hf hK hM S hS'
+  intro s hs
+  have hEBapp : ∀ j : ℕ, EBr j
+    = A * (((1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) ^ j) - 1) / ((K : ℝ) * ((S.δ : ℚ) : ℝ)) := by
+    intro j; simp only [hEBrdef]
+  rw [← hEBapp N]
+  set n : ℕ := S.idxR s with hndef
+  set q : ℝ := (s - ((S.t₀ : ℚ) : ℝ)) / ((S.δ : ℚ) : ℝ) with hqdef
+  have ht₀S : S.t₀ = t₀ := hS'.2.1
+  have hq0 : 0 ≤ q := by
+    rw [hqdef, ht₀S]; exact div_nonneg (by linarith [hs.1]) hδR.le
+  have hqN : q ≤ (N : ℝ) := by
+    rw [hqdef, ht₀S, div_le_iff₀ hδR]
+    have : ((T : ℚ) : ℝ) = ((t₀ : ℚ) : ℝ) + (N : ℝ) * ((S.δ : ℚ) : ℝ) := by
+      rw [← htN]; simp only [VectorScheme.t_succ', ht₀S]; push_cast; ring
+    linarith [hs.2]
+  have hfl0 : 0 ≤ ⌊q⌋ := Int.le_floor.mpr (by exact_mod_cast hq0)
+  have hncast : (n : ℝ) = (⌊q⌋ : ℝ) := by
+    rw [hndef, VectorScheme.idxR, ← hqdef]
+    norm_cast
+    simp only [Int.ofNat_toNat, sup_eq_left]
+    exact hfl0
+  have hnq : (n : ℝ) ≤ q := by rw [hncast]; exact Int.floor_le q
+  have hqn : q < (n : ℝ) + 1 := by rw [hncast]; exact Int.lt_floor_add_one q
+  have hnN : n ≤ N := by
+    have : (n : ℝ) ≤ (N : ℝ) := le_trans hnq hqN
+    exact_mod_cast this
+  have htn_le : ((S.t n : ℚ) : ℝ) ≤ s := by
+    have hs' : s = ((S.t₀ : ℚ) : ℝ) + q * ((S.δ : ℚ) : ℝ) := by
+      rw [hqdef]; field_simp; simp only [add_sub_cancel]
+    rw [hs']
+    simp only [VectorScheme.t_succ']
+    push_cast
+    nlinarith [hnq, hδR]
+  have hs_le : s ≤ ((S.t n : ℚ) : ℝ) + ((S.δ : ℚ) : ℝ) := by
+    have hs' : s = ((S.t₀ : ℚ) : ℝ) + q * ((S.δ : ℚ) : ℝ) := by
+      rw [hqdef]; field_simp; simp only [add_sub_cancel]
+    rw [hs']
+    simp only [VectorScheme.t_succ']
+    push_cast
+    nlinarith [hqn, hδR]
+  have hplR : S.plR s = (S.x n : ℝ^k)
+      + (s - ((S.t n : ℚ) : ℝ)) • ((S.m (S.t n) (S.x n) : ℚ^k) : ℝ^k) := by
+    simp only [VectorScheme.plR, ← hndef]
+  rcases lt_or_eq_of_le hnN with hlt | heq
+  · rw [hplR]
+    refine le_trans (hcell n (by rw [hfloor]; exact Finset.mem_range.mpr hlt) s
+        ⟨htn_le, hs_le⟩) ?_
+    have hKcast : (((K : ℝ).toNNReal : NNReal) : ℝ) = (K : ℝ) := by
+      simp only [Real.toNNReal]
+      simp only [NNReal.coe_mk, sup_eq_left, Rat.cast_nonneg]
+      exact_mod_cast hKne.le
+    rw [hKcast]
+    calc ‖y (S.t n) - (S.x n : ℝ^k)‖ * (1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) + A
+        ≤ EBr n * (1 + (K : ℝ) * ((S.δ : ℚ) : ℝ)) + A := by
+          have := hgrid' n (le_of_lt hlt)
+          nlinarith [hδR, hKR]
+      _ = EBr (n + 1) := hEBrec n
+      _ ≤ EBr N := hEBmono (by omega)
+  · subst heq
+    have hsT : s = ((S.t n : ℚ) : ℝ) :=
+      le_antisymm (by rw [htN]; exact hs.2) htn_le
+    rw [hplR, hsT]
+    simp only [sub_self, zero_smul, add_zero]
+    exact hgrid' n le_rfl
+
+end Vector
 
 end ODE
