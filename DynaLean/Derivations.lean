@@ -1,5 +1,7 @@
-import Mathlib
-import DynaLean.Defs
+module
+
+public import Mathlib
+public import DynaLean.Defs
 
 /-! # Regularity of solutions, and bounds on the second derivative
 
@@ -19,6 +21,7 @@ ones; the two developments are identical up to `|·|` versus `‖·‖`.
 Note that this module is a plain (non-`module`) Lean file and is not re-exported by the
 root `DynaLean` module; import `DynaLean.Derivations` directly to use it.
 -/
+@[expose] public section
 
 namespace ODE
 

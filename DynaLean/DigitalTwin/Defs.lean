@@ -4,8 +4,6 @@ public import DynaLean.Defs
 public import DynaLean.EulerScheme
 public import DynaLean.EulerBound
 
-@[expose] public section
-
 /-! # Digital twins: definitions
 
 A *digital twin* here is a physical system `z` that is being tracked by a model. Three
@@ -43,6 +41,8 @@ The reachable set is then propagated as a sequence of balls, one per measurement
 
 The soundness theorems for all of this live in `DynaLean.DigitalTwin.MemBox`.
 -/
+
+@[expose] public section
 
 namespace ODE
 

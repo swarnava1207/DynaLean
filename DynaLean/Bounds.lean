@@ -3,9 +3,6 @@ module
 public import Mathlib
 public import DynaLean.Defs
 
-@[expose] public section
-open Topology
-
 /-! # A priori upper bounds for ODE solutions
 
 Two elementary ways to bound a scalar solution from above without solving the equation,
@@ -19,6 +16,9 @@ difference is antitone:
 Both conclusions are one-sided; applying them to `-x` (solution of `-f`) gives the
 corresponding lower bounds.
 -/
+
+@[expose] public section
+open Topology
 
 variable {f : ℝ → ℝ → ℝ} {x0 : ℝ} {t₀ T : ℝ} {M : NNReal}
 

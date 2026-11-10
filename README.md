@@ -8,7 +8,7 @@ integration, derivatives, and inequalities.
 The library has two layers that meet in the middle:
 
 - an **analytic layer** — existence, uniqueness, comparison, and a priori bounds
-	for solutions of `x' = f t x`;
+	for solutions of `x' = f (t, x)`;
 - a **computational layer** — Euler schemes over `ℚ`, error bounds that are
 	themselves rational (hence exactly evaluable), and metaprograms that turn a
 	numerical computation into a kernel-checked theorem.
@@ -60,10 +60,19 @@ between an exact real solution and the rational data produced by a scheme.
 
 - `DynaLean/Rules.lean`: qualitative invariants a solution satisfies for
 	structural reasons — an invariant half-line, monotonicity, and forward
-	invariance of a band `[-R, R]` for an inward-pointing field.
+	invariance of a band `[-R, R]` for an inward-pointing field. Each has an
+	`ℝ^n`-valued counterpart stated in a single coordinate (half-space,
+	coordinate monotonicity, invariant slab), plus `ODE.solution_mem_box_vector`:
+	forward invariance of an axis-aligned box. The vector versions are proved
+	from two reusable barrier lemmas for a real function with a prescribed
+	derivative, rather than through the comparison theorem, so they need no
+	Lipschitz hypothesis — at the cost of assuming the sign condition on a whole
+	region rather than only on the boundary.
 - `DynaLean/RulesBound.lean`: intersects each rule from `Rules.lean` with the
 	Euler error interval, giving enclosures strictly tighter than either source
-	alone.
+	alone. The vector half first projects the ball enclosure
+	`‖y tₙ - xₙ‖ ≤ bound n` onto a coordinate (`ODE.euler_bound_coord`), turning
+	it into a box, and then refines each coordinate as in the scalar case.
 - `DynaLean/Refinement.lean`: the generic version. Prior one-sided bounds are
 	modelled as `Option ℚ` (so "no information" is a first-class case), and
 	`ODE.refinement` returns the midpoint of the Euler interval clipped by them,
@@ -124,8 +133,8 @@ definition modules. Every other module must be imported directly.
 The project currently follows the `mathlib` Git revision configured in
 [`lakefile.toml`](lakefile.toml).
 
-The library uses the Lean module system: most files begin with `module` and use
-`public import`. `DynaLean/Derivations.lean` is a plain Lean file.
+The library uses the Lean module system: every file begins with `module` and uses
+`public import`.
 
 ## Getting Started
 

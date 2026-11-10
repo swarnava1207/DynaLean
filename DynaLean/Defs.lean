@@ -3,9 +3,6 @@ module
 public import Mathlib
 set_option linter.style.header false
 
-
-@[expose] public section
-
 /-! # Core definitions
 
 The vocabulary shared by every other module in DynaLean:
@@ -19,6 +16,8 @@ The vocabulary shared by every other module in DynaLean:
 * `ODE.extend` — the constant extension of a vector field that is only meaningful on a
   compact box, used to turn local hypotheses into global ones.
 -/
+
+@[expose] public section
 
 namespace ODE
 section OneDDef

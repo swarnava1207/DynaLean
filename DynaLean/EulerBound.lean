@@ -4,10 +4,6 @@ public import Mathlib
 public import DynaLean.Defs
 public import DynaLean.EulerScheme
 
-
-@[expose] public section
-open Topology
-
 /-! # Error bounds for the Euler scheme
 
 The central results of DynaLean. They bound the distance between an exact solution `y`
@@ -42,6 +38,9 @@ of three budgets:
 Section `Vector` repeats steps 2-5 for `ℝ^k`-valued solutions; those are the versions
 consumed by `DynaLean.DigitalTwin`.
 -/
+
+@[expose] public section
+open Topology
 
 namespace ODE
 

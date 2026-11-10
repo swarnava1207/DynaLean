@@ -2,10 +2,9 @@ module
 
 public import Mathlib
 public import DynaLean.Defs
-public import DynaLean.EulerScheme
+public meta import DynaLean.EulerScheme
+import DynaLean.EulerScheme
 public import DynaLean.EulerBound
-
-@[expose] public section
 
 /-! # Refining a numerical estimate with prior one-sided bounds
 
@@ -29,6 +28,8 @@ monotone variant, where the estimate at step `n + 1` is the running maximum of t
 Euler iterates — legitimate when the exact solution is known to be increasing along the
 grid.
 -/
+
+@[expose] public section
 
 namespace ODE
 

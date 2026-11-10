@@ -6,8 +6,6 @@ public import DynaLean.EulerScheme
 public import DynaLean.EulerBound
 public import DynaLean.Rules
 
-@[expose] public section
-
 /-! # Enclosures that combine the Euler bound with a qualitative rule
 
 `DynaLean.EulerBound` gives a symmetric interval `xₙ ± bound n` around each Euler
@@ -26,6 +24,8 @@ The `*_refine` functions are pure rational computations: they take the scheme an
 error budget and return an interval. The `*_bound` theorems say that the exact solution
 really lies in that interval at every grid point of `[t₀, T]`.
 -/
+
+@[expose] public section
 
 namespace ODE
 
@@ -182,5 +182,206 @@ theorem lyapunov_bound (R : ℚ) (hf : ∀ t ∈ Set.Icc (t₀ : ℝ) T, (∀ x 
     grind
 
 end RefineProofs
+
+/-! ## The vector case
+
+For a system, `ODE.euler_bound_solution_rational_vector` encloses the solution in a
+*ball*: `‖y tₙ - xₙ‖ ≤ bound n`. Projecting that onto a coordinate
+(`ODE.euler_bound_coord`, via `PiLp.norm_apply_le`) turns the ball into a box, after
+which each coordinate can be refined exactly as in the scalar case, using the
+coordinatewise rules of `DynaLean.Rules`:
+
+* `half_space_refine_vector`, from `solution_half_space_vector`, sound by
+  `half_space_bound_vector`;
+* `monotone_refine_vector`, from `solution_monotone_vector`, sound by
+  `monotone_bound_vector`;
+* `lyapunov_refine_vector`, from `solution_lyapunov_kind_vector`, sound by
+  `lyapunov_bound_vector`.
+
+Projecting a ball to a box is lossy — a coordinate interval of half-width `bound n` is
+all the ball gives, and the box it produces has circumradius `√k · bound n` — but it is
+what makes the rules applicable at all, since the rules constrain coordinates. The
+enclosure actually certified is the intersection of the ball with the refined box, and
+both halves are available: `ODE.euler_bound_solution_rational_vector` for the ball and
+the theorems below for the box. -/
+
+/-- The vector analogue of `ODE.half_line_refine`, in coordinate `i`: intersect the
+coordinate interval `xₙ i ± bound n` with the half-line `[c, ∞)`. -/
+def half_space_refine_vector {k : ℕ} (S : VectorScheme k) (ε c K M : ℚ) (i : Fin k) (n : ℕ) :
+    ℚ × ℚ :=
+  let Ln := (S.x n) i - bound n ε K M S.δ
+  let Un := (S.x n) i + bound n ε K M S.δ
+  (max c Ln, Un)
+
+/-- The vector analogue of `ODE.monotone_refine`, in coordinate `i`: the lower end never
+decreases along the grid, because the coordinate itself never does. -/
+def monotone_refine_vector {k : ℕ} (S : VectorScheme k) (ε K M : ℚ) (i : Fin k) (n : ℕ) :
+    ℚ × ℚ :=
+  let Ln := (S.x n) i - bound n ε K M S.δ
+  let Un := (S.x n) i + bound n ε K M S.δ
+  match n with
+  | 0 => (Ln, Un)
+  | m + 1 => (max (monotone_refine_vector S ε K M i m).1 Ln, Un)
+
+/-- The vector analogue of `ODE.lyapunov_refine`, in coordinate `i`: intersect the
+coordinate interval `xₙ i ± bound n` with the invariant band `[-R, R]`. -/
+def lyapunov_refine_vector {k : ℕ} (S : VectorScheme k) (ε R K M : ℚ) (i : Fin k) (n : ℕ) :
+    ℚ × ℚ :=
+  let Ln := (S.x n) i - bound n ε K M S.δ
+  let Un := (S.x n) i + bound n ε K M S.δ
+  (max (-R) Ln, min R Un)
+
+/-- Project the vector Euler bound onto a single coordinate.
+
+`ODE.euler_bound_solution_rational_vector` bounds `‖y tₙ - xₙ‖`; since every coordinate
+of a vector is bounded by its Euclidean norm (`PiLp.norm_apply_le`), the same number
+bounds `|y tₙ i - xₙ i|` for each `i`. This is what converts the ball enclosure into a
+box enclosure, and it is the only place where the vector refinements below touch the
+Euler machinery. -/
+theorem euler_bound_coord {k : ℕ} {f : ℝ → (ℝ^k) → ℝ^k} {y : ℝ → ℝ^k}
+    {ε t₀ T K M : ℚ} {x₀ : ℚ^k} {S : VectorScheme k}
+    (hMne : 0 < M) (hKne : 0 < K) (hT : t₀ < T)
+    (hlip : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : ℝ).toNNReal (fun x => f t x))
+    (hy : SolutionExistsVector f (x₀ : ℝ^k) y (t₀ : ℝ) T (Set.Icc (t₀ : ℝ) T))
+    (hcont : ContDiffOn ℝ 2 y (Set.Icc (t₀ : ℝ) T))
+    (hm : ∀ (t : ℚ) (x : ℚ^k), ‖f t (x : ℝ^k) - S.m t x‖ ≤ ε)
+    (hiter : ∀ t ∈ Set.Ioo (t₀ : ℝ) T, ‖iteratedDeriv 2 y t‖ ≤ M)
+    (hS : S.t₀ = t₀ ∧ S.x₀ = x₀) (i : Fin k) :
+    ∀ n ∈ Finset.range (⌊(T - t₀)/S.δ⌋₊ + 1),
+      |y (S.t n) i - (((S.x n) i : ℚ) : ℝ)| ≤ ((bound n ε K M S.δ : ℚ) : ℝ) := by
+  intro n hn
+  have hrat := euler_bound_solution_rational_vector f x₀ t₀ T M hMne (by exact_mod_cast hKne)
+    hy hcont S hT hm hlip hiter hS n hn
+  have hproj : |y ((S.t n : ℚ) : ℝ) i - (((S.x n) i : ℚ) : ℝ)|
+      ≤ ‖y ((S.t n : ℚ) : ℝ) - ((S.x n : ℚ^k) : ℝ^k)‖ := by
+    have h := PiLp.norm_apply_le (y ((S.t n : ℚ) : ℝ) - ((S.x n : ℚ^k) : ℝ^k)) i
+    rwa [Real.norm_eq_abs] at h
+  refine hproj.trans (hrat.trans (le_of_eq ?_))
+  simp only [bound]
+  push_cast
+  ring
+
+/-- Grid points of a vector scheme anchored at `t₀` lie in `[t₀, T]`.
+
+`VectorScheme.time_mem` phrased relative to the scheme's own `S.t₀`; this rewrites it
+along `hS1 : S.t₀ = t₀` so it can be fed to the rules of `DynaLean.Rules`, whose
+hypotheses are stated on `[t₀, T]`. -/
+theorem vector_time_mem {k : ℕ} {t₀ T : ℚ} {S : VectorScheme k}
+    (hT : t₀ < T) (hS1 : S.t₀ = t₀) {n : ℕ}
+    (hn : n ∈ Finset.range (⌊(T - t₀) / S.δ⌋₊ + 1)) :
+    ((S.t n : ℚ) : ℝ) ∈ Set.Icc ((t₀ : ℚ) : ℝ) ((T : ℚ) : ℝ) := by
+  have hle : S.t₀ ≤ T := by rw [hS1]; exact hT.le
+  have h := S.time_mem T hle n (by rw [hS1]; exact hn)
+  rwa [hS1] at h
+
+section VectorRefineProofs
+
+/-! ### Soundness of the vector refinements
+
+The hypothesis block mirrors the scalar one exactly, with `SolutionExists` replaced by
+`SolutionExistsVector` and the absolute values by norms: these are the hypotheses of
+`ODE.euler_bound_solution_rational_vector`, plus whatever the particular rule needs. -/
+
+variable {k : ℕ} {f : ℝ → (ℝ^k) → ℝ^k} {y : ℝ → ℝ^k} {S : VectorScheme k}
+  {ε t₀ T K M : ℚ} {x₀ : ℚ^k} (hMne : 0 < M) (hKne : 0 < K)
+  (hT : t₀ < T)
+  (hlip : ∀ t ∈ Set.Icc (t₀ : ℝ) T, LipschitzWith (K : ℝ).toNNReal (fun x => f t x))
+  (hy : SolutionExistsVector f (x₀ : ℝ^k) y (t₀ : ℝ) T (Set.Icc (t₀ : ℝ) T))
+  (hcont : ContDiffOn ℝ 2 y (Set.Icc (t₀ : ℝ) T))
+  (hm : ∀ (t : ℚ) (x : ℚ^k), ‖f t (x : ℝ^k) - S.m t x‖ ≤ ε)
+  (hiter : ∀ t ∈ Set.Ioo (t₀ : ℝ) T, ‖iteratedDeriv 2 y t‖ ≤ M)
+  (hS : S.t₀ = t₀ ∧ S.x₀ = x₀)
+
+include hMne hKne hT hlip hy hcont hm hiter hS
+
+/-- Soundness of `ODE.half_space_refine_vector`: coordinate `i` of the exact solution
+lies in the refined interval at every grid point of `[t₀, T]`.
+
+The upper end comes from the projected Euler bound alone; the lower end is the max of
+that bound's lower end and the barrier `c`, which the solution respects by
+`ODE.solution_half_space_vector`. -/
+theorem half_space_bound_vector (i : Fin k) (c : ℚ) (hc : (c : ℝ) ≤ y (t₀ : ℝ) i)
+  (hfc : ∀ t ∈ Set.Icc (t₀ : ℝ) T, ∀ x : ℝ^k, x i ≤ (c : ℝ) → 0 ≤ (f t x) i)
+  : ∀ n ∈ Finset.range (⌊(T - t₀)/ S.δ⌋₊ + 1),
+    y (S.t n) i ∈ Set.Icc ((half_space_refine_vector S ε c K M i n).1 : ℝ)
+                          ((half_space_refine_vector S ε c K M i n).2 : ℝ) :=
+  by
+  intro n hn
+  have hco := euler_bound_coord hMne hKne hT hlip hy hcont hm hiter hS i n hn
+  have hcomp := solution_half_space_vector i hy hc hfc
+  have hmem := vector_time_mem hT hS.1 hn
+  rw [abs_le] at hco
+  obtain ⟨hco1, hco2⟩ := hco
+  simp only [half_space_refine_vector, Set.mem_Icc]
+  push_cast at hco1 hco2 ⊢
+  exact ⟨max_le (hcomp _ hmem) (by linarith), by linarith⟩
+
+/-- Soundness of `ODE.monotone_refine_vector`: coordinate `i` of the exact solution lies
+in the refined interval at every grid point of `[t₀, T]`.
+
+Proved by induction on the step index, exactly as in the scalar case. The inductive step
+needs both the projected Euler bound at step `m + 1` and the monotonicity
+`y (t m) i ≤ y (t (m+1)) i` supplied by `ODE.solution_monotone_vector`, which is what
+justifies carrying the running maximum of the lower ends forward. -/
+theorem monotone_bound_vector (i : Fin k)
+  (hf : ∀ t ∈ Set.Icc (t₀ : ℝ) T, 0 ≤ (f t (y t)) i)
+  : ∀ n ∈ Finset.range (⌊(T - t₀)/ S.δ⌋₊ + 1),
+    y (S.t n) i ∈ Set.Icc ((monotone_refine_vector S ε K M i n).1 : ℝ)
+                          ((monotone_refine_vector S ε K M i n).2 : ℝ) :=
+  by
+  have hmono := solution_monotone_vector i hy hf
+  intro n
+  induction n with
+  | zero =>
+    intro hn
+    have hb : bound 0 ε K M S.δ = 0 := by simp [bound]
+    have hx : y ((S.t 0 : ℚ) : ℝ) i = (((S.x 0) i : ℚ) : ℝ) := by
+      rw [VectorScheme.t_zero, VectorScheme.x_zero, hS.1, hS.2, hy.1]
+      rfl
+    simp only [monotone_refine_vector, hb, sub_zero, add_zero, Set.mem_Icc, hx]
+    exact ⟨le_rfl, le_rfl⟩
+  | succ m ih =>
+    intro hn
+    have hmp : m ∈ Finset.range (⌊(T - t₀) / S.δ⌋₊ + 1) := by
+      simp only [Finset.mem_range] at hn ⊢
+      omega
+    have ihm := ih hmp
+    have hco := euler_bound_coord hMne hKne hT hlip hy hcont hm hiter hS i (m + 1) hn
+    rw [abs_le] at hco
+    obtain ⟨hco1, hco2⟩ := hco
+    have hstep : y ((S.t m : ℚ) : ℝ) i ≤ y ((S.t (m + 1) : ℚ) : ℝ) i := by
+      have hst : ((S.t m : ℚ) : ℝ) ≤ ((S.t (m + 1) : ℚ) : ℝ) := by
+        have h : S.t m ≤ S.t (m + 1) := by
+          rw [VectorScheme.t_succ]; linarith [S.hδ.le]
+        exact_mod_cast h
+      exact hmono (vector_time_mem hT hS.1 hmp) (vector_time_mem hT hS.1 hn) hst
+    simp only [monotone_refine_vector, Set.mem_Icc]
+    push_cast at hco1 hco2 ⊢
+    exact ⟨max_le (le_trans ihm.1 hstep) (by linarith), by linarith⟩
+
+/-- Soundness of `ODE.lyapunov_refine_vector`: coordinate `i` of the exact solution lies
+in the refined interval at every grid point of `[t₀, T]`.
+
+Both ends are tightened: the projected Euler interval is intersected with the invariant
+band `[-R, R]` furnished by `ODE.solution_lyapunov_kind_vector`. -/
+theorem lyapunov_bound_vector (i : Fin k) (R : ℚ)
+  (hf : ∀ t ∈ Set.Icc (t₀ : ℝ) T, (∀ x : ℝ^k, (R : ℝ) ≤ x i → (f t x) i ≤ 0) ∧
+    (∀ x : ℝ^k, x i ≤ (-R : ℝ) → 0 ≤ (f t x) i))
+  (hs : y (t₀ : ℝ) i ∈ Set.Icc (-R : ℝ) (R : ℝ))
+  : ∀ n ∈ Finset.range (⌊(T - t₀)/ S.δ⌋₊ + 1),
+    y (S.t n) i ∈ Set.Icc ((lyapunov_refine_vector S ε R K M i n).1 : ℝ)
+                          ((lyapunov_refine_vector S ε R K M i n).2 : ℝ) :=
+  by
+  intro n hn
+  have hco := euler_bound_coord hMne hKne hT hlip hy hcont hm hiter hS i n hn
+  have hcomp := solution_lyapunov_kind_vector i hy hf hs
+  have hband := hcomp _ (vector_time_mem hT hS.1 hn)
+  rw [abs_le] at hco
+  obtain ⟨hco1, hco2⟩ := hco
+  simp only [lyapunov_refine_vector, Set.mem_Icc]
+  push_cast at hco1 hco2 ⊢
+  exact ⟨max_le hband.1 (by linarith), le_min hband.2 (by linarith)⟩
+
+end VectorRefineProofs
 
 end ODE

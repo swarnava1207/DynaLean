@@ -3,8 +3,6 @@ module
 public import Mathlib
 public import DynaLean.Defs
 
-@[expose] public section
-
 /-! # A Bihari-type integral bound
 
 Bihari's inequality is the nonlinear generalization of Grönwall's: where Grönwall
@@ -20,6 +18,8 @@ The single theorem here, `ODE.nonneg_integral_bound`, states exactly that, and r
 the inverse `G⁻¹` (realized as `Function.invFunOn`) together with the two equations
 witnessing that it really is a two-sided inverse of `G` on the relevant sets.
 -/
+
+@[expose] public section
 
 variable {f : ℝ → ℝ → ℝ}
 

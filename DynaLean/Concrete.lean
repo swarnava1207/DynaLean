@@ -5,15 +5,6 @@ public import Lean
 public meta import DynaLean.EulerScheme
 import DynaLean.EulerScheme
 
-@[expose] public section
-set_option cbv.warning false
-set_option cbv.maxSteps 10000000
-
-open Lean Elab Command Meta
-open Lean.Meta.Tactic.Cbv (cbvEntry)
-open Lean.Meta.Sym.Simp (Result)
-open Lean.Meta.Tactic.TryThis (addSuggestion)
-
 /-! # `#derive_bound`: concrete bounds on the Euler iterates `S.x n`
 
 A command that evaluates a `Scheme`'s iterate `S.x n` and emits a *proved* theorem
@@ -46,6 +37,15 @@ Nothing here is part of the trusted story: the output is an ordinary theorem who
 proof the kernel checks.
 -/
 
+@[expose] public section
+set_option cbv.warning false
+set_option cbv.maxSteps 10000000
+
+open Lean Elab Command Meta
+open Lean.Meta.Tactic.Cbv (cbvEntry)
+open Lean.Meta.Sym.Simp (Result)
+open Lean.Meta.Tactic.TryThis (addSuggestion)
+
 
 /-! ## 1. What the compute phase produces
 
@@ -76,7 +76,8 @@ Emits `(a : ℚ)`, `(-a : ℚ)`, `(a : ℚ) / b` or `(-a : ℚ) / b`. -/
   if q.den == 1 then `(($signed : ℚ)) else `(($signed : ℚ) / $(natLitT q.den))
 
 /-- The statement of the generated theorem. -/
-@[expose] public meta def mkStmt [Monad m] [MonadQuotation m] (S : Term) (n : ℕ) : BoundShape → m Term
+@[expose] public meta def mkStmt [Monad m] [MonadQuotation m] (S : Term) (n : ℕ) :
+    BoundShape → m Term
   | .eq v => do
       let xId := mkIdent `x
       `(($S).$xId $(natLitT n) = $(← ratLit v))

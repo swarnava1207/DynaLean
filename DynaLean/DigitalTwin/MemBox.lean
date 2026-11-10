@@ -5,8 +5,6 @@ public import DynaLean.EulerScheme
 public import DynaLean.EulerBound
 public import DynaLean.DigitalTwin.Defs
 
-@[expose] public section
-
 /-! # Digital twins: soundness of the tube construction
 
 `DynaLean.DigitalTwin.Defs` defines the computation: `ODE.Rec` re-centres a ball on a
@@ -37,6 +35,8 @@ The results, in dependency order:
 *proof* that the model has drifted out of its stated error budget, not merely a
 failure to establish containment.
 -/
+
+@[expose] public section
 
 namespace ODE
 

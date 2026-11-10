@@ -7,11 +7,6 @@ public meta import DynaLean.Defs
 public meta import DynaLean.EulerScheme
 import DynaLean.EulerScheme
 
-@[expose] public section
-open Lean Meta Elab Term Tactic Qq
-open Lean.Meta.Tactic.TryThis (addSuggestion)
-open Lean Meta PrettyPrinter
-
 /-! # Proof *building* for Euler iterates
 
 `DynaLean.Concrete` evaluates an iterate and then searches for a tactic that can prove
@@ -43,6 +38,11 @@ Everything here produces ordinary proof terms that the kernel checks; the `unsaf
 evaluation helpers (`RatOf`, `RatOfVec`) are only used to compare numbers for error
 reporting and to decide what to build.
 -/
+
+@[expose] public section
+open Lean Meta Elab Term Tactic Qq
+open Lean.Meta.Tactic.TryThis (addSuggestion)
+open Lean Meta PrettyPrinter
 
 section Scalar
 

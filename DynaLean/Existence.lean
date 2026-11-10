@@ -4,10 +4,6 @@ public import Mathlib
 public import DynaLean.Defs
 public import DynaLean.Comparison
 
-@[expose] public section
-open Set Filter
-open Metric
-
 /-! # Existence (and uniqueness) of solutions on a whole interval
 
 Mathlib's Picard-Lindelöf theorem produces a solution only on a short interval whose
@@ -33,6 +29,10 @@ comparison theorem of `DynaLean.Comparison` applied in both directions.
 The section `Vectors` at the end mirrors the whole development for `ℝ^n`-valued
 solutions; the statements and proofs are the scalar ones with `|·|` replaced by `‖·‖`.
 -/
+
+@[expose] public section
+open Set Filter
+open Metric
 
 namespace ODE
 

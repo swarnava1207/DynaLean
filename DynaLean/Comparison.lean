@@ -3,9 +3,6 @@ module
 public import Mathlib
 public import DynaLean.Defs
 
-@[expose] public section
-open Topology
-
 /-! # First-order comparison of ODE solutions
 
 The single result of this module, `ODE.comparison_first_order`, is the standard
@@ -22,6 +19,9 @@ This result is reused for uniqueness (`ODE.uniqueness_of_solution_of_lipschitzOn
 by comparing a solution with itself in both directions) and for the qualitative
 invariants of `DynaLean.Rules`.
 -/
+
+@[expose] public section
+open Topology
 
 namespace ODE
 

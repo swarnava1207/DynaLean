@@ -3,8 +3,6 @@ module
 public import Mathlib
 public import DynaLean.Defs
 
-@[expose] public section
-
 /-! # Euler schemes on a rational grid
 
 An *Euler scheme* is the data needed to run the explicit Euler method: a step size `δ`,
@@ -28,6 +26,8 @@ This module provides:
 The `VectorScheme` half of the file mirrors the scalar half declaration for
 declaration, with `*` replaced by the scalar action `•`.
 -/
+
+@[expose] public section
 
 /-- The Euler schema initial details packed as a `structure`.
 
