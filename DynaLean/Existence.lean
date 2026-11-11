@@ -28,6 +28,9 @@ comparison theorem of `DynaLean.Comparison` applied in both directions.
 
 The section `Vectors` at the end mirrors the whole development for `ℝ^n`-valued
 solutions; the statements and proofs are the scalar ones with `|·|` replaced by `‖·‖`.
+Its final subsection repeats the local-to-global argument: `ODE.extendVector` globalizes
+hypotheses that only hold on `Icc t₀ T ×ˢ closedBall c r`, giving
+`ODE.exists_solution_of_lipschitzOn_box_vector`.
 -/
 
 @[expose] public section
@@ -1104,8 +1107,78 @@ theorem existence_by_induction_lipschitzOn_vector {n : ℕ} {K : NNReal} (f : �
       norm_cast
       grind
 
+section extendVector
 
+/-! ## Globalizing hypotheses that only hold on a compact box, for `ℝ^n`
 
+The `ℝ^n` analogue of the `extend` section above. `ODE.extendVector f t₀ T c r` (defined in
+`DynaLean.Defs`) clamps the time into `Icc t₀ T` and the state into `closedBall c r`, the
+latter by the radial retraction `ODE.clampBall`. As in the scalar case this costs nothing:
+the extension agrees with `f` on the box, inherits continuity globally, and inherits the
+Lipschitz constant globally — `clampBall` being nonexpansive. -/
+
+variable {n : ℕ} {f : ℝ → (ℝ^n) → ℝ^n} {t₀ T r : ℝ} {c : ℝ^n} {K : NNReal}
+
+/-- On the box, the extension *is* `f`.
+
+The `ℝ^n` analogue of `ODE.extend_eq_of_mem`. -/
+theorem extendVector_eq_of_mem {t : ℝ} {y : ℝ^n} (ht : t ∈ Set.Icc t₀ T)
+    (hy : y ∈ closedBall c r) : extendVector f t₀ T c r t y = f t y := by
+  rw [extendVector, clamp_eq_self ht, clampBall_eq_self hy]
+
+/-- The extension is continuous on all of `ℝ × ℝ^n`.
+
+The `ℝ^n` analogue of `ODE.continuous_extend`. -/
+theorem continuous_extendVector (ht : t₀ ≤ T) (hr : 0 ≤ r)
+    (hfc : ContinuousOn (fun p : ℝ × ℝ^n => f p.1 p.2) (Set.Icc t₀ T ×ˢ closedBall c r)) :
+    Continuous (fun p : ℝ × ℝ^n => extendVector f t₀ T c r p.1 p.2) := by
+  have hmap : ∀ p : ℝ × ℝ^n,
+      (clamp t₀ T p.1, clampBall c r p.2) ∈ Set.Icc t₀ T ×ˢ closedBall c r :=
+    fun p => ⟨clamp_mem ht p.1, clampBall_mem hr p.2⟩
+  have hg : Continuous fun p : ℝ × ℝ^n => (clamp t₀ T p.1, clampBall c r p.2) :=
+    ((lipschitzWith_clamp t₀ T).continuous.comp continuous_fst).prodMk
+      ((lipschitzWith_clampBall c hr).continuous.comp continuous_snd)
+  exact hfc.comp_continuous hg hmap
+
+/-- The extension is globally Lipschitz in the space variable, with the same constant.
+
+The `ℝ^n` analogue of `ODE.lipschitzWith_extend`. -/
+theorem lipschitzWith_extendVector (ht : t₀ ≤ T) (hr : 0 ≤ r)
+    (hfl : ∀ t ∈ Set.Icc t₀ T, LipschitzOnWith K (fun y => f t y) (closedBall c r)) :
+    ∀ t, LipschitzWith K (fun y => extendVector f t₀ T c r t y) := by
+  intro t
+  have hL := hfl _ (clamp_mem ht t)
+  refine LipschitzWith.of_dist_le_mul fun y z => ?_
+  have h₁ := hL.dist_le_mul _ (clampBall_mem hr y) _ (clampBall_mem hr z)
+  have h₂ : dist (clampBall c r y) (clampBall c r z) ≤ dist y z := by
+    simpa using (lipschitzWith_clampBall c hr).dist_le_mul y z
+  exact h₁.trans (mul_le_mul_of_nonneg_left h₂ K.coe_nonneg)
+
+/-- **Main result for `ℝ^n`.**  If `f` is continuous and Lipschitz-in-`y` merely on the
+compact box `Icc t₀ T ×ˢ closedBall c r`, then its constant extension
+`extendVector f t₀ T c r` is globally continuous and globally Lipschitz, so it has a
+solution on the *whole* interval `[t₀, T]` for any initial value `x₀`.  That solution
+solves the original equation `x' = f t x` at every time at which it happens to sit inside
+the ball.
+
+The `ℝ^n` analogue of `ODE.exists_solution_of_lipschitzOn_box`. -/
+theorem exists_solution_of_lipschitzOn_box_vector {n : ℕ}
+    (f : ℝ → (ℝ^n) → ℝ^n) (x₀ : ℝ^n) (t₀ T : ℝ) (c : ℝ^n) (r : ℝ) {K : NNReal}
+    (hKne : K ≠ 0) (ht : t₀ ≤ T) (hr : 0 ≤ r)
+    (hfc : ContinuousOn (fun p : ℝ × ℝ^n => f p.1 p.2) (Set.Icc t₀ T ×ˢ closedBall c r))
+    (hfl : ∀ t ∈ Set.Icc t₀ T, LipschitzOnWith K (fun y => f t y) (closedBall c r)) :
+    ∃ x : ℝ → ℝ^n,
+      SolutionExistsVector (extendVector f t₀ T c r) x₀ x t₀ T (Set.Icc t₀ T) ∧
+      ∀ t ∈ Set.Icc t₀ T, x t ∈ closedBall c r →
+        HasDerivWithinAt x (f t (x t)) (Set.Icc t₀ T) t := by
+  obtain ⟨x, hx0, hx⟩ :=
+    existence_by_induction_vector (extendVector f t₀ T c r) x₀ t₀ T hKne
+      (continuous_extendVector ht hr hfc) (lipschitzWith_extendVector ht hr hfl)
+  refine ⟨x, ⟨hx0, hx⟩, fun t htmem hball => ?_⟩
+  have h := hx t htmem
+  rwa [extendVector_eq_of_mem htmem hball] at h
+
+end extendVector
 
 end Vectors
 end ODE

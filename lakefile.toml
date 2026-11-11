@@ -16,3 +16,8 @@ rev = "v4.34.1"
 
 [[lean_lib]]
 name = "DynaLean"
+# Without this, Lake builds only the root module `DynaLean` and whatever it
+# transitively imports -- which is just `Basic` and `Defs`. Every other file
+# would go unchecked by `lake build` and by CI. `DynaLean.*` means the root
+# module together with all submodules, recursively.
+globs = ["DynaLean.*"]

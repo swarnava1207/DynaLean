@@ -1,3 +1,7 @@
 /.lake
-/.lake
-/.lake
+
+# LaTeX build artefacts
+report/*.synctex.gz
+report/*.log
+report/*.aux
+report/*.out

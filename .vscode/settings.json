@@ -1,0 +1,57 @@
+{
+  // ---------------------------------------------------------------------
+  // LaTeX Workshop, driven by Tectonic.
+  // Tectonic is a single self-contained binary that fetches the packages it
+  // needs on demand, so no TeX Live / MiKTeX installation is required.
+  // ---------------------------------------------------------------------
+  "latex-workshop.latex.tools": [
+    {
+      "name": "tectonic",
+      "command": "C:\\Users\\SwarnavaChakraborty\\tools\\tectonic\\tectonic.exe",
+      "args": [
+        "-X",
+        "compile",
+        "--synctex",
+        "--keep-logs",
+        "--outdir",
+        "%OUTDIR%",
+        "%DOC_EXT%"
+      ],
+      "env": {}
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "Tectonic",
+      "tools": ["tectonic"]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "first",
+
+  // Put the PDF next to the .tex file.
+  "latex-workshop.latex.outDir": "%DIR%",
+
+  // ---------------------------------------------------------------------
+  // Preview: open the PDF in a VS Code tab, so it can sit side by side
+  // with the source. Rebuild whenever the file is saved.
+  // ---------------------------------------------------------------------
+  "latex-workshop.view.pdf.viewer": "tab",
+  "latex-workshop.latex.autoBuild.run": "onSave",
+
+  // ---------------------------------------------------------------------
+  // SyncTeX, both directions.
+  //   source -> PDF : Ctrl+Alt+J, or automatically after each build
+  //   PDF -> source : double-click anywhere in the PDF
+  // ---------------------------------------------------------------------
+  "latex-workshop.synctex.afterBuild.enabled": true,
+  "latex-workshop.view.pdf.internal.synctex.keybinding": "double-click",
+
+  // Tectonic leaves almost nothing behind; don't let the extension delete
+  // files it did not create.
+  "latex-workshop.latex.autoClean.run": "never",
+
+  // Keep the generated artefacts out of the way in the Explorer.
+  "files.exclude": {
+    "**/*.synctex.gz": true
+  }
+}

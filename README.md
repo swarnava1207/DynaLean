@@ -24,8 +24,9 @@ between an exact real solution and the rational data produced by a scheme.
 	and the Mathlib dependency are wired up correctly.
 - `DynaLean/Defs.lean`: the `ODE.SolutionExists` and `ODE.SolutionExistsVector`
 	predicates, the `ℝ^n` / `ℚ^n` notations and the coercion `ℚ^n → ℝ^n`, interval
-	clamping (`ODE.clamp`), and the constant extension `ODE.extend` of a vector
-	field defined only on a compact box.
+	clamping (`ODE.clamp`) together with its `ℝ^n` analogue `ODE.clampBall`, and the
+	constant extensions `ODE.extend` / `ODE.extendVector` of a scalar, resp.
+	vector-valued, field defined only on a compact box.
 
 ### Analytic theory
 
